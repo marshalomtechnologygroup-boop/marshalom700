@@ -1413,7 +1413,7 @@ const translations = {
         socialTitle:'ማህበራዊ', shareTitle:'ማጋሪያ',
         shareWelcomeTitle:'✨ እንኳን ደህና መጡ ወደ Shalom Technology! ✨', shareWelcomeText:'ይህንን ቦት ለጓደኞችዎ ያጋሩ!',
         shareBtn:'📤 ቻናላችንን ያጋሩ (Telegram ይምረጡ)',
-        newsTitle:'ዜና', compareTitle:'ንጽጽር',
+        newsTitle:'ዜና', applicationsTitle:'Applications', feedbackTitle:'አስተያየት እና ምስክርነት',
         jobsTitle:'ክፍት ስራ', jobsApply:'📝 አሁን አመልክት', jobsEmpty:'ለጊዜው ክፍት የስራ ቦታ የለም',
         discountTitle:'ቅናሽ', aiTitle:'ረዳት', supportTitle:'ድጋፍ', supportSub:'24/7 ደንበኛ ድጋፍ',
         promoTitle:'ማስታወቂያ', promoEmpty:'ለጊዜው ማስታወቂያ የለም',
@@ -1435,7 +1435,7 @@ const translations = {
         socialTitle:'Social', shareTitle:'Share',
         shareWelcomeTitle:'✨ Welcome to Shalom Technology! ✨', shareWelcomeText:'Share this bot with your friends!',
         shareBtn:'📤 Share our channel (choose Telegram)',
-        newsTitle:'News', compareTitle:'Compare',
+        newsTitle:'News', applicationsTitle:'Applications', feedbackTitle:'Feedback & Testimonials',
         jobsTitle:'Jobs', jobsApply:'📝 Apply Now', jobsEmpty:'No open positions right now',
         discountTitle:'Discount', aiTitle:'Assistant', supportTitle:'Support', supportSub:'24/7 Customer Support',
         promoTitle:'Promo', promoEmpty:'No promotions right now',
@@ -1457,7 +1457,7 @@ const translations = {
         socialTitle:'ማህበራዊ', shareTitle:'ኣጋሩ',
         shareWelcomeTitle:'✨ ናብ Shalom Technology ብደሓን መጻእኩም! ✨', shareWelcomeText:'ነዚ ቦት ንመሓዙትኩም ኣጋሩ!',
         shareBtn:'📤 ቻናልና ኣጋሩ',
-        newsTitle:'ዜና', compareTitle:'ንጽጽር',
+        newsTitle:'ዜና', applicationsTitle:'Applications', feedbackTitle:'ርእይቶን ምስክርነትን',
         jobsTitle:'ክፍቲ ስራሕ', jobsApply:'📝 ሕጂ ኣመልክቱ', jobsEmpty:'ሕጂ ክፍቲ ቦታ የለን',
         discountTitle:'ቅናሽ', aiTitle:'ረዳት', supportTitle:'ደገፍ', supportSub:'24/7 ደገፍ ዓሚል',
         promoTitle:'ማስታወቂያ', promoEmpty:'ሕጂ ማስታወቂያ የለን',
@@ -1479,7 +1479,7 @@ const translations = {
         socialTitle:'Hawaasa', shareTitle:'Qooda',
         shareWelcomeTitle:'✨ Baga Nagaan Dhuftan Shalom Technology! ✨', shareWelcomeText:'Bot kana hiriyoota keessaniif qoodaa!',
         shareBtn:'📤 Channel keenya qoodaa',
-        newsTitle:'Oduu', compareTitle:'Madaalii',
+        newsTitle:'Oduu', applicationsTitle:'Applications', feedbackTitle:'Yaada fi Ragaa',
         jobsTitle:'Hojii Banaa', jobsApply:'📝 Amma Iyyadhu', jobsEmpty:'Yeroo ammaa hojiin banaan hin jiru',
         discountTitle:'Hir\u2019aa', aiTitle:'Gargaaraa', supportTitle:'Deggersa', supportSub:'Deggersa Maamilaa 24/7',
         promoTitle:'Beeksisa', promoEmpty:'Yeroo ammaa beeksisni hin jiru',
@@ -1493,45 +1493,50 @@ const translations = {
     }
 };
 
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el && value !== undefined) el.textContent = value;
+}
 function switchLanguage(lang) {
     currentLang = lang;
     const t = translations[lang];
     document.querySelectorAll('.lang-selector button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-    document.getElementById('mainTitle').textContent = t.title;
-    document.getElementById('mainSub').textContent = t.sub;
+    setText('mainTitle', t.title);
+    setText('mainSub', t.sub);
     document.querySelectorAll('[data-key]').forEach(el => {
         const key = el.dataset.key;
         if (t[key]) el.textContent = t[key];
     });
-    document.getElementById('pTitle').textContent = t.pTitle;
-    document.getElementById('channelText').textContent = t.channelText;
-    document.getElementById('callTitle').textContent = t.callTitle;
-    document.getElementById('callLabel1').textContent = t.callLabel1;
-    document.getElementById('callLabel2').textContent = t.callLabel2;
-    document.getElementById('socialTitle').textContent = t.socialTitle;
-    document.getElementById('shareTitle').textContent = t.shareTitle;
-    document.getElementById('shareWelcomeTitle').textContent = t.shareWelcomeTitle;
-    document.getElementById('shareWelcomeText').textContent = t.shareWelcomeText;
-    document.getElementById('shareBtn').textContent = t.shareBtn;
-    document.getElementById('newsTitle').textContent = t.newsTitle;
-    document.getElementById('compareTitle').textContent = t.compareTitle;
-    document.getElementById('jobsTitle').textContent = t.jobsTitle;
-    document.getElementById('discountTitle').textContent = t.discountTitle;
-    document.getElementById('aiTitle').textContent = t.aiTitle;
-    document.getElementById('supportTitle').textContent = t.supportTitle;
-    document.getElementById('supportSub').textContent = t.supportSub;
-    document.getElementById('promoTitle').textContent = t.promoTitle;
-    document.getElementById('tipsTitle').textContent = t.tipsTitle;
-    document.getElementById('banksTitle').textContent = t.banksTitle;
-    document.getElementById('loginTitle').textContent = t.loginTitle;
-    document.getElementById('loginSub').textContent = t.loginSub;
-    document.getElementById('loginBtn').textContent = t.loginBtn;
-    document.getElementById('adminTitle').textContent = t.adminTitle;
-    document.getElementById('tlTitle').textContent = t.tlTitle;
-    document.getElementById('empTitle').textContent = t.empTitle;
+    setText('pTitle', t.pTitle);
+    setText('channelText', t.channelText);
+    setText('callTitle', t.callTitle);
+    setText('callLabel1', t.callLabel1);
+    setText('callLabel2', t.callLabel2);
+    setText('socialTitle', t.socialTitle);
+    setText('shareTitle', t.shareTitle);
+    setText('shareWelcomeTitle', t.shareWelcomeTitle);
+    setText('shareWelcomeText', t.shareWelcomeText);
+    setText('shareBtn', t.shareBtn);
+    setText('newsTitle', t.newsTitle);
+    setText('applicationsTitle', t.applicationsTitle || 'Applications');
+    setText('jobsTitle', t.jobsTitle);
+    setText('discountTitle', t.discountTitle);
+    setText('aiTitle', t.aiTitle);
+    setText('supportTitle', t.supportTitle);
+    setText('supportSub', t.supportSub);
+    setText('promoTitle', t.promoTitle);
+    setText('tipsTitle', t.tipsTitle);
+    setText('banksTitle', t.banksTitle);
+    setText('feedbackTitle', t.feedbackTitle || 'አስተያየት እና ምስክርነት');
+    setText('adminTitle', t.adminTitle);
+    setText('tlTitle', t.tlTitle);
+    setText('empTitle', t.empTitle);
     renderProducts();
     renderPromos();
     renderJobs();
+    loadApplications();
+    loadTestimonials();
+    loadSocial();
 }
 
 function toggleHomeMenu() {

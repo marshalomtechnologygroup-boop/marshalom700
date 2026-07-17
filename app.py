@@ -1046,12 +1046,13 @@ CATALOG_HTML = """
 
     .section-title { color: #b8a84a; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     .product-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-    .product-card { background: rgba(255,255,255,0.04); border-radius: 14px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06); }
-    .product-card .promo-img { width: 100%; height: 100px; object-fit: cover; background: linear-gradient(135deg,#1a2a3a,#2a3a4a); }
-    .product-card .info { padding: 6px 8px; text-align: center; }
-    .product-card .name { font-weight: 600; font-size: 11px; color: #b8a84a; }
-    .product-card .desc { font-size: 9px; color: #8aa3b5; margin: 2px 0 4px; white-space: pre-line; max-height: 60px; overflow-y: auto; }
-    .product-card .ask-btn { width: 100%; padding: 5px; border: none; border-radius: 8px; color: #fff; font-weight: 600; font-size: 10px; cursor: pointer; background: linear-gradient(135deg,#4a3a1a,#3a2a0a); }
+    .product-card { background: rgba(255,255,255,0.04); border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 18px rgba(0,0,0,0.25); transition: transform 0.2s ease; }
+    .product-card:active { transform: scale(0.97); }
+    .product-card .promo-img { width: 100%; height: 110px; object-fit: cover; background: linear-gradient(135deg,#1a2a3a,#2a3a4a); }
+    .product-card .info { padding: 8px 10px; text-align: center; }
+    .product-card .name { font-weight: 700; font-size: 12px; color: #d4c56a; }
+    .product-card .desc { font-size: 9px; color: #8aa3b5; margin: 3px 0 6px; white-space: pre-line; max-height: 60px; overflow-y: auto; }
+    .product-card .ask-btn { width: 100%; padding: 7px; border: none; border-radius: 10px; color: #fff; font-weight: 700; font-size: 10px; cursor: pointer; background: linear-gradient(135deg,#4a9eff,#2a7adf); box-shadow: 0 4px 12px rgba(74,158,255,0.3); }
     .channel-link { padding: 8px; background: rgba(74,158,255,0.08); border-radius: 12px; text-align: center; border: 1px dashed #4a9eff; margin-bottom: 10px; }
     .channel-link a { color: #4a9eff; font-weight: 600; text-decoration: none; font-size: 12px; }
 
@@ -1067,6 +1068,10 @@ CATALOG_HTML = """
 
     .btn-primary { background: #4a9eff; border: none; border-radius: 30px; padding: 10px; color: #fff; font-weight: 600; font-size: 13px; width: 100%; cursor: pointer; margin-top: 4px; }
     .btn-primary.gold { background: #b8a84a; color: #1a1a2e; }
+    .shimmer-btn { position: relative; overflow: hidden; background: linear-gradient(135deg,#4a9eff,#2a7adf); color: #fff; font-size: 15px; font-weight: 700; padding: 14px 20px; border-radius: 40px; width: 100%; border: none; cursor: pointer; box-shadow: 0 8px 26px rgba(74,158,255,0.45); }
+    .shimmer-btn:active { transform: scale(0.97); }
+    .shimmer-btn::after { content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background: linear-gradient(45deg, transparent 40%, rgba(255,255,255,0.25) 50%, transparent 60%); animation: shimmerMove 2.6s infinite; pointer-events:none; }
+    @keyframes shimmerMove { 0% { transform: translateX(-100%) rotate(45deg); } 100% { transform: translateX(100%) rotate(45deg); } }
     .card-box { background: rgba(255,255,255,0.04); border-radius: 12px; padding: 10px; border: 1px solid rgba(255,255,255,0.06); text-align: center; cursor: pointer; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
@@ -1098,13 +1103,26 @@ CATALOG_HTML = """
 
         <!-- HOME -->
         <div class="page active" id="page-home">
-            <div id="homeHeroBox" style="position:relative; overflow:hidden; background:linear-gradient(135deg,#1a2a3a,#243447); border-radius:18px; padding:22px 16px; text-align:center; border:1px solid rgba(74,158,255,0.15); box-shadow:0 8px 24px rgba(0,0,0,0.3);">
+            <div id="homeHeroBox" style="position:relative; overflow:hidden; background:linear-gradient(135deg,#1a2a3a,#243447); border-radius:22px; padding:28px 18px; text-align:center; border:1px solid rgba(74,158,255,0.15); box-shadow:0 8px 30px rgba(0,0,0,0.35);">
                 <img id="homeHeroBg" src="" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.25; z-index:0;" />
                 <div style="position:relative; z-index:1;">
-                    <img src="/static/logo.jpg" style="width:70px; height:70px; border-radius:16px; object-fit:cover; box-shadow:0 4px 16px rgba(0,0,0,0.4); animation: logoSpin 6s ease-in-out infinite;" />
-                    <div id="homeHeaderSlot" style="color:#fff; font-size:16px; font-weight:700; margin-top:10px;" class="blink-slow">Shalom Technology</div>
-                    <div style="color:#9bb0c0; font-size:11px; margin-top:2px;">✨ የእርስዎ የደህንነት አጋር ✨</div>
-                    <button class="btn-primary gold" style="margin-top:16px;" onclick="toggleHomeMenu()">🚀 Marshalom Application</button>
+                    <img src="/static/logo.jpg" style="width:84px; height:84px; border-radius:20px; object-fit:cover; box-shadow:0 8px 26px rgba(74,158,255,0.35); animation: logoSpin 6s ease-in-out infinite;" />
+                    <div id="homeHeaderSlot" style="color:#fff; font-size:19px; font-weight:700; margin-top:12px;" class="blink-slow">Shalom Technology</div>
+                    <div style="color:#9bb0c0; font-size:11px; margin-top:2px; letter-spacing:0.5px;">✨ የእርስዎ የደህንነት አጋር ✨</div>
+
+                    <div style="background:rgba(255,255,255,0.04); border-radius:18px; padding:16px 14px; border:1px solid rgba(255,255,255,0.06); margin-top:18px;">
+                        <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:6px;">Welcome!</div>
+                        <div style="color:#fff; font-size:12px; line-height:1.9;">እንኳን ደህና መጡ! ✨</div>
+                        <div style="color:#b8c8d8; font-size:12px; line-height:1.9;">እንኳዕ ደሓን መጻእኩም!</div>
+                        <div style="color:#a0b8c8; font-size:12px; line-height:1.9;">Baga nagaan dhufte!</div>
+                        <div style="width:60px; height:2px; background:linear-gradient(90deg,transparent,#4a9eff,transparent); margin:10px auto;"></div>
+                        <div style="color:#b8c8d8; font-size:11px; line-height:1.6;">የእኛ ሙሉ አገልግሎት ለማየት ከታች ይጫኑ 👇</div>
+                    </div>
+
+                    <button class="shimmer-btn" style="margin-top:16px;" onclick="toggleHomeMenu()">🚀 እዚህ ይጫኑ / OPEN</button>
+                    <div style="color:#6a8a9e; font-size:10px; margin-top:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:4px 8px;">
+                        <span>ለመክፈት እዚህ ጠቅ ያድርጉ</span><span>•</span><span>ንምክፋት ጠውቕ</span><span>•</span><span>Banuuf tuqi</span>
+                    </div>
                 </div>
             </div>
             <div id="homeMenuGrid" style="display:none; margin-top:12px;">

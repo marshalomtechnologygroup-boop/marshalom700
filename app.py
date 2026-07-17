@@ -201,6 +201,7 @@ def init_db():
         cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT TRUE")
         cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT")
         cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS internal_email TEXT")
+        cur.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS profile_photo TEXT")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id SERIAL PRIMARY KEY,
@@ -595,49 +596,50 @@ def add_employee(username, password, full_name, position, salary):
 def get_employee_by_credentials(username, password):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, internal_email FROM employees WHERE username=%s AND password=%s", (username, password))
+    cur.execute("SELECT id, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, internal_email, profile_photo FROM employees WHERE username=%s AND password=%s", (username, password))
     row = cur.fetchone()
     cur.close()
     conn.close()
     if row:
         return {"id": row[0], "full_name": row[1], "position": row[2], "salary": row[3], "bonus": row[4],
-                "warnings": row[5], "tasks": row[6], "role": row[7], "must_change_password": row[8], "internal_email": row[9]}
+                "warnings": row[5], "tasks": row[6], "role": row[7], "must_change_password": row[8],
+                "internal_email": row[9], "profile_photo": row[10]}
     return None
 
 def get_employee_by_id(employee_id):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, telegram_chat_id, internal_email FROM employees WHERE id=%s", (employee_id,))
+    cur.execute("SELECT id, username, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, telegram_chat_id, internal_email, profile_photo FROM employees WHERE id=%s", (employee_id,))
     row = cur.fetchone()
     cur.close()
     conn.close()
     if row:
         return {"id": row[0], "username": row[1], "full_name": row[2], "position": row[3], "salary": row[4],
                 "bonus": row[5], "warnings": row[6], "tasks": row[7], "role": row[8],
-                "must_change_password": row[9], "telegram_chat_id": row[10], "internal_email": row[11]}
+                "must_change_password": row[9], "telegram_chat_id": row[10], "internal_email": row[11], "profile_photo": row[12]}
     return None
 
 def get_employee_by_username(username):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, telegram_chat_id, internal_email FROM employees WHERE username=%s", (username,))
+    cur.execute("SELECT id, username, full_name, position, salary, bonus, warnings, tasks, role, must_change_password, telegram_chat_id, internal_email, profile_photo FROM employees WHERE username=%s", (username,))
     row = cur.fetchone()
     cur.close()
     conn.close()
     if row:
         return {"id": row[0], "username": row[1], "full_name": row[2], "position": row[3], "salary": row[4],
                 "bonus": row[5], "warnings": row[6], "tasks": row[7], "role": row[8],
-                "must_change_password": row[9], "telegram_chat_id": row[10], "internal_email": row[11]}
+                "must_change_password": row[9], "telegram_chat_id": row[10], "internal_email": row[11], "profile_photo": row[12]}
     return None
 
 def list_employees():
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, username, full_name, position, role FROM employees ORDER BY id")
+    cur.execute("SELECT id, username, full_name, position, role, profile_photo, internal_email FROM employees ORDER BY id")
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return [{"id": r[0], "username": r[1], "full_name": r[2], "position": r[3], "role": r[4]} for r in rows]
+    return [{"id": r[0], "username": r[1], "full_name": r[2], "position": r[3], "role": r[4], "profile_photo": r[5], "internal_email": r[6]} for r in rows]
 
 def update_employee_field(username, field, value, append=False):
     """field is one of: bonus, warnings, tasks, salary"""
@@ -705,11 +707,35 @@ def add_testimonial(name, username, message):
 def get_testimonials(limit=30):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT name, username, message, created_at FROM testimonials ORDER BY id DESC LIMIT %s", (limit,))
+    cur.execute("SELECT id, name, username, message, created_at FROM testimonials ORDER BY id DESC LIMIT %s", (limit,))
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    return [{"name": r[0], "username": r[1], "message": r[2], "created_at": str(r[3])} for r in rows]
+    return [{"id": r[0], "name": r[1], "username": r[2], "message": r[3], "created_at": str(r[4])} for r in rows]
+
+def delete_testimonial(testimonial_id):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM testimonials WHERE id=%s", (testimonial_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def delete_employee(username):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM employees WHERE username=%s", (username,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+def set_employee_photo(username, photo_base64):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE employees SET profile_photo=%s WHERE username=%s", (photo_base64, username))
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # ===== የውስጥ መልእክት ሳጥን (Internal Inbox: customer -> team leader / admin) =====
 def send_internal_message(sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message):
@@ -1394,6 +1420,8 @@ CATALOG_HTML = """
 
     </div>
 
+    <button id="bigBackBtn" onclick="showPage('page-home')" style="display:none; position:fixed; bottom:78px; left:50%; transform:translateX(-50%); max-width:380px; width:calc(100% - 28px); background:#4a9eff; color:#fff; font-size:14px; font-weight:700; padding:12px; border:none; border-radius:14px; box-shadow:0 6px 20px rgba(74,158,255,0.4); z-index:50;">🏠⬅️ ተመለስ / BACK</button>
+
     <div class="bottom-nav-wrap">
         <div class="bottom-nav" id="bottomNavTicker">
             <div class="nav-item active" onclick="showPage('page-home')"><span class="icon">🏠</span><span data-key="n1">መነሻ</span></div>
@@ -1572,6 +1600,7 @@ function showPage(pageId) {
     else if (pageId === 'page-ai') document.querySelector('.nav-item:nth-child(3)').classList.add('active');
     else if (pageId === 'page-share') document.querySelector('.nav-item:nth-child(4)').classList.add('active');
     else if (pageId === 'page-jobs') document.querySelector('.nav-item:nth-child(5)').classList.add('active');
+    document.getElementById('bigBackBtn').style.display = (pageId === 'page-home') ? 'none' : 'block';
     if (pageId === 'page-admin') loadAdminPage();
 }
 
@@ -1948,17 +1977,46 @@ function renderEmployeePanel(profile, username, password) {
 
     el.innerHTML = `
         <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:14px;">
-            <div style="text-align:center; font-size:32px;">👤</div>
+            <div style="text-align:center;">${profile.profile_photo ? `<img src="${profile.profile_photo}" style="width:64px; height:64px; border-radius:50%; object-fit:cover;">` : '<span style="font-size:32px;">👤</span>'}</div>
             <div style="text-align:center; color:#fff; font-weight:700; font-size:14px;">${profile.full_name}</div>
-            <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position}</div>
+            <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.internal_email || ''}</div>
             <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
                 <b>💰 ደመወዝ:</b> ${profile.salary || '-'}<br>
-                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\\n/g,'<br>')}<br>
-                <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\\n/g,'<br>')}<br>
-                <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\\n/g,'<br>')}
+                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\n/g,'<br>')}<br>
+                <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\n/g,'<br>')}<br>
+                <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\n/g,'<br>')}
             </div>
+            <div style="margin-top:10px; font-size:9px; color:#8aa3b5;">📷 የመገለጫ ፎቶ ቀይር:</div>
+            <input type="file" id="empPhotoFile" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary" onclick="empSavePhoto('${username}', ${JSON.stringify(password)})">💾 ፎቶ አስቀምጥ</button>
+            <div class="section-title" style="margin-top:10px;">📩 መልእክቶቼ</div>
+            <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
+            <div id="empInboxList"></div>
         </div>
     `;
+}
+async function empSavePhoto(username, password) {
+    const fileInput = document.getElementById('empPhotoFile');
+    if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
+    const photo = await fileToBase64(fileInput.files[0]);
+    await fetch(`/api/team/employees/${username}/photo`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({tl_username: username, tl_password: password, photo})
+    });
+    alert('✅ ፎቶ ተቀምጧል!');
+    employeeLoginRetry(username, password);
+}
+async function empLoadInbox(username, password) {
+    const res = await fetch('/api/message/inbox', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({tl_username: username, tl_password: password})
+    });
+    const items = await res.json();
+    document.getElementById('empInboxList').innerHTML = (items || []).map(m => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            <b>${m.sender_name}</b><br>${m.message}<br><span style="color:#8aa3b5;">${m.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም መልእክት የለም</p>';
 }
 
 async function changeEmpPassword(username, oldPassword) {
@@ -2015,23 +2073,81 @@ async function renderTeamLeaderPanel(profile) {
 
     el.innerHTML = `
         <div style="text-align:center; margin-bottom:10px;">
-            <div style="font-size:28px;">👔</div>
+            ${profile.profile_photo ? `<img src="${profile.profile_photo}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; margin-bottom:6px;">` : '<div style="font-size:28px;">👔</div>'}
             <div style="color:#fff; font-weight:700;">${profile.full_name}</div>
-            <div style="color:#8aa3b5; font-size:11px;">🌟 ቲም ሊደር</div>
+            <div style="color:#8aa3b5; font-size:11px;">🌟 ቲም ሊደር | ${profile.internal_email || ''}</div>
         </div>
+
+        <div class="section-title">➕ አዲስ ሰራተኛ ጨምር</div>
+        <input type="text" id="tlNewName" placeholder="ሙሉ ስም" class="input-field">
+        <input type="text" id="tlNewPosition" placeholder="ስራ" class="input-field">
+        <button class="btn-primary gold" onclick="tlAddEmployee()">➕ ጨምር</button>
+
+        <div class="section-title" style="margin-top:12px;">👥 ሰራተኞቼ</div>
         <div id="tlEmployeeList"></div>
+
+        <div class="section-title" style="margin-top:12px;">📩 መልእክቶቼ</div>
+        <button class="btn-primary" onclick="tlLoadInbox()">🔄 መልእክቶች አሳይ</button>
+        <div id="tlInboxList"></div>
     `;
     const listEl = document.getElementById('tlEmployeeList');
     listEl.innerHTML = (employees || []).map(e => `
         <div style="background:rgba(255,255,255,0.03); border-radius:10px; padding:8px; margin-bottom:6px;">
-            <b style="color:#fff; font-size:12px;">${e.full_name}</b> <span style="color:#8aa3b5; font-size:10px;">(${e.position})</span>
-            <div style="display:flex; gap:4px; margin-top:6px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${e.profile_photo ? `<img src="${e.profile_photo}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">` : '<span style="font-size:20px;">👤</span>'}
+                <div><b style="color:#fff; font-size:12px;">${e.full_name}</b><br><span style="color:#8aa3b5; font-size:9px;">${e.position} • ${e.internal_email || ''}</span></div>
+            </div>
+            <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
                 <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlResetPassword('${e.username}')">🔐 Reset</button>
                 <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlAssignTask('${e.username}')">📋 Task</button>
                 <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlGiveBonus('${e.username}')">🎁 Bonus</button>
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="tlDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
             </div>
         </div>
     `).join('') || '<p class="empty-msg">ምንም ሰራተኛ የለም</p>';
+}
+
+async function tlAddEmployee() {
+    const full_name = document.getElementById('tlNewName').value;
+    const position = document.getElementById('tlNewPosition').value;
+    if (!full_name) { alert('ስም ያስፈልጋል'); return; }
+    const res = await fetch('/api/team/add_employee', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, full_name, position, role: 'employee'})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        alert(`✅ ተጨምሯል!\nUsername: ${data.username}\nPassword: ${data.password}\nEmail: ${data.internal_email}\n\n⚠️ ሰራተኛው መጀመሪያ ቦቱን /start ካደረገ በኋላ ብቻ በራስ-ሰር ማሳወቅ ይቻላል።`);
+        teamLeaderLoginRefresh();
+    }
+}
+async function teamLeaderLoginRefresh() {
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: teamLeaderCreds.tl_username, password: teamLeaderCreds.tl_password})
+    });
+    const data = await res.json();
+    if (data.ok) renderTeamLeaderPanel(data.profile);
+}
+async function tlDeleteEmployee(username) {
+    if (!confirm('እርግጠኛ ነዎት?')) return;
+    await fetch('/api/team/employees/'+username, {
+        method: 'DELETE', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    teamLeaderLoginRefresh();
+}
+async function tlLoadInbox() {
+    const res = await fetch('/api/message/inbox', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    const items = await res.json();
+    document.getElementById('tlInboxList').innerHTML = (items || []).map(m => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            <b>${m.sender_name}</b> (@${m.sender_username || 'የለም'})<br>${m.message}<br><span style="color:#8aa3b5;">${m.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም መልእክት የለም</p>';
 }
 
 async function tlResetPassword(username) {
@@ -2073,13 +2189,14 @@ async function loadAdminPage() {
         el.innerHTML = '<p class="empty-msg">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ)</p>';
         return;
     }
-    const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes] = await Promise.all([
+    const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes, employeesRes] = await Promise.all([
         fetch('/api/admin/stats', {headers:{'X-Init-Data': initData}}),
         fetch('/api/products'),
         fetch('/api/admin/customers', {headers:{'X-Init-Data': initData}}),
         fetch('/api/jobs'),
         fetch('/api/admin/applications', {headers:{'X-Init-Data': initData}}),
-        fetch('/api/config/banks')
+        fetch('/api/config/banks'),
+        fetch('/api/team/employees', {method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})})
     ]);
     const stats = await statsRes.json();
     const products = await productsRes.json();
@@ -2087,6 +2204,7 @@ async function loadAdminPage() {
     const jobs = await jobsRes.json();
     const applications = await appsRes.json();
     const banks = await banksRes.json();
+    const allEmployees = await employeesRes.json();
 
     el.innerHTML = `
         <div class="grid2" style="margin-bottom:10px;">
@@ -2179,6 +2297,23 @@ async function loadAdminPage() {
         <textarea id="socialConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(DEFAULT_SOCIAL, null, 2)}</textarea>
         <button class="btn-primary gold" onclick="adminSaveSocial()">💾 ማህበራዊ ሚዲያ አስቀምጥ</button>
 
+        <div class="section-title" style="margin-top:14px;">🌟 ምስክርነቶች አስተዳደር</div>
+        <button class="btn-primary" onclick="adminLoadTestimonialsMod()">🔄 አሳይ</button>
+        <div id="adminTestimonialsMod"></div>
+
+        <div class="section-title" style="margin-top:14px;">👥 ሰራተኞች/ቲም ሊደር አስተዳደር</div>
+        <div id="adminEmployeesList">
+            ${(allEmployees || []).map(e => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+                    <b>${e.full_name}</b> (${e.role === 'team_leader' ? '🌟 ቲም ሊደር' : '👤 ሰራተኛ'})<br>${e.position} • ${e.internal_email || ''}
+                    <div style="display:flex; gap:4px; margin-top:4px;">
+                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="adminResetEmpPassword('${e.username}')">🔐 Reset</button>
+                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
+                    </div>
+                </div>
+            `).join('') || '<p class="empty-msg">ምንም የለም</p>'}
+        </div>
+
         <div class="section-title" style="margin-top:14px;">📩 የመልእክት ሳጥን (ሁሉም)</div>
         <button class="btn-primary" onclick="adminLoadInbox()">🔄 መልእክቶች አሳይ</button>
         <div id="adminInboxList"></div>
@@ -2268,6 +2403,34 @@ async function adminSaveSocial() {
         alert('✅ ተቀምጧል!');
         loadSocial();
     } catch(e) { alert('❌ JSON ትክክል አይደለም'); }
+}
+async function adminLoadTestimonialsMod() {
+    const res = await fetch('/api/testimonials');
+    const items = await res.json();
+    document.getElementById('adminTestimonialsMod').innerHTML = (items || []).map(t => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span><b>${t.name}</b>: ${t.message}</span>
+            <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteTestimonial(${t.id})">🗑️</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም የለም</p>';
+}
+async function adminDeleteTestimonial(id) {
+    await fetch('/api/testimonials/'+id, {method:'DELETE', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})});
+    adminLoadTestimonialsMod();
+    loadTestimonials();
+}
+async function adminResetEmpPassword(username) {
+    const res = await fetch('/api/team/reset_password', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({username})
+    });
+    const data = await res.json();
+    if (data.ok) alert('✅ Temp password: ' + data.temp_password);
+}
+async function adminDeleteEmployee(username) {
+    if (!confirm('እርግጠኛ ነዎት?')) return;
+    await fetch('/api/team/employees/'+username, {method:'DELETE', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})});
+    loadAdminPage();
 }
 async function adminLoadInbox() {
     const res = await fetch('/api/message/inbox', {
@@ -2544,6 +2707,27 @@ def api_testimonials_add():
     add_testimonial(name, username, message)
     return jsonify({"ok": True})
 
+@app.route('/api/testimonials/<int:testimonial_id>', methods=['DELETE'])
+def api_testimonials_delete(testimonial_id):
+    body = request.get_json(silent=True) or {}
+    init_data = request.headers.get('X-Init-Data', '')
+    user = verify_telegram_webapp_data(init_data)
+    is_super = user and is_admin_chat(user.get('id'))
+    is_tl = False
+    tl_username = body.get('tl_username')
+    if not is_super and tl_username and body.get('tl_password'):
+        emp = get_employee_by_credentials(tl_username, body.get('tl_password'))
+        is_tl = emp is not None and emp.get('role') == 'team_leader'
+    if not (is_super or is_tl):
+        return jsonify({"error": "forbidden"}), 403
+    delete_testimonial(testimonial_id)
+    if is_tl and not is_super:
+        requests.post(f"{TELEGRAM_URL}/sendMessage", json={
+            'chat_id': OWNER_CHAT_ID,
+            'text': f"⚠️ ማሳወቂያ፦ ቲም ሊደር ({tl_username}) አንድ ምስክርነት ሰርዟል (ID: {testimonial_id})"
+        })
+    return jsonify({"ok": True})
+
 # ===== የውስጥ መልእክት ሳጥን (Internal Inbox) =====
 @app.route('/api/message/send', methods=['POST'])
 def api_message_send():
@@ -2660,6 +2844,38 @@ def api_team_reset_password():
             'text': f"🔐 password ዎ ዳግም ተጀምሯል። ጊዜያዊ password: {temp_pw}"
         })
     return jsonify({"ok": True, "temp_password": temp_pw})
+
+@app.route('/api/team/employees/<username>', methods=['DELETE'])
+def api_team_delete_employee(username):
+    body = request.get_json(silent=True) or {}
+    if not is_authorized_manager(body):
+        return jsonify({"error": "forbidden"}), 403
+    delete_employee(username)
+    return jsonify({"ok": True})
+
+@app.route('/api/team/employees/<username>/photo', methods=['POST'])
+def api_team_set_photo(username):
+    body = request.get_json(silent=True) or {}
+    if not is_authorized_manager(body):
+        return jsonify({"error": "forbidden"}), 403
+    set_employee_photo(username, body.get('photo'))
+    return jsonify({"ok": True})
+
+@app.route('/api/team/add_employee', methods=['POST'])
+def api_team_add_employee():
+    body = request.get_json(silent=True) or {}
+    if not is_authorized_manager(body):
+        return jsonify({"error": "forbidden"}), 403
+    full_name = body.get('full_name', 'New User')
+    position = body.get('position', '')
+    role = body.get('role', 'employee')
+    username = body.get('username') or (full_name.lower().replace(' ', '') + str(random.randint(100,999)))
+    temp_password = generate_temp_password()
+    add_employee(username, temp_password, full_name, position, body.get('salary', ''))
+    if role == 'team_leader':
+        set_employee_role(username, 'team_leader')
+    emp = get_employee_by_username(username)
+    return jsonify({"ok": True, "username": username, "password": temp_password, "internal_email": emp.get('internal_email') if emp else None})
 
 # ===== ⚙️ Admin Dashboard Mini App (ለባለቤት ብቻ) =====
 ADMIN_HTML = """

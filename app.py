@@ -805,7 +805,9 @@ def schedule_daily_promos():
     print("✅ Promo scheduler started.")
 
 # ===== የ Mini App HTML =====
-CATALOG_HTML = """
+CATALOG_HTML = "git add .
+git commit -m "Full CATALOG and ADMIN HTML"
+git push"
 <!DOCTYPE html>
 <html lang="am">
 <head>

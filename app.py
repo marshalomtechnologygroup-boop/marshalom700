@@ -3538,9 +3538,13 @@ def index():
                 })
                 return "OK"
 
-            # Normal /start
-            requests.post(url, json={'chat_id': chat_id, 'text': WELCOME_MESSAGE})
-            send_with_webapp_button(chat_id, '🛍️ ካታሎግ ለማየት ይህን ይጫኑ', '🛍️ ምርቶች ይመልከቱ', '/webapp')
+            # Normal /start - single clear message, button label matches call-to-action
+            send_with_webapp_button(
+                chat_id,
+                WELCOME_MESSAGE + "\n\n👇 ሙሉ ካታሎግ እና አገልግሎት ለማየት ከታች ያለውን ቁልፍ ይጫኑ 👇",
+                "🚀 መተግበሪያውን ክፈት / OPEN APP",
+                '/webapp'
+            )
             requests.post(url, json={
                 'chat_id': chat_id,
                 'text': '📢 ቻናላችንን ይቀላቀሉ',

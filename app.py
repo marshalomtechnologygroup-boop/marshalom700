@@ -830,6 +830,11 @@ def test():
                 result += f"  ❌ Live check FAILED: {tg_data.get('description')}\n"
         except Exception as e:
             result += f"  ❌ Live check exception: {e}\n"
+        try:
+            menu_check = requests.get(f"{TELEGRAM_URL}/getChatMenuButton", timeout=15).json()
+            result += f"  📱 Menu Button: {menu_check.get('result')}\n"
+        except Exception as e:
+            result += f"  ❌ Menu Button check exception: {e}\n"
     result += f"OWNER_CHAT_ID: {'✅ SET' if OWNER_CHAT_ID else '❌ NOT SET'}\n"
     result += f"DEEPSEEK_API_KEY: {'✅ SET' if DEEPSEEK_API_KEY else '❌ NOT SET'}\n"
     result += f"CHANNEL_ID: {CHANNEL_ID}\n"
@@ -3602,8 +3607,25 @@ def index():
 
 
 # Initialize database table and start the promo scheduler when the app boots
+def set_persistent_menu_button():
+    """Sets Telegram's built-in Menu Button (next to the message input box) to open
+    the Mini App directly. This is more reliable than inline message buttons and
+    works the same for every user, old or new, without needing a fresh /start."""
+    try:
+        result = requests.post(f"{TELEGRAM_URL}/setChatMenuButton", json={
+            "menu_button": {
+                "type": "web_app",
+                "text": "🚀 Open App",
+                "web_app": {"url": f"{BASE_URL.rstrip('/')}/webapp"}
+            }
+        }, timeout=15)
+        print(f"setChatMenuButton result: {result.json()}")
+    except Exception as e:
+        print(f"setChatMenuButton error: {e}")
+
 init_db()
 schedule_daily_promos()
+set_persistent_menu_button()
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))

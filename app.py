@@ -17,6 +17,8 @@ app = Flask(__name__)
 # ===== ደህንነቱ የተጠበቀ - ከ Render Environment Variables ይነበባል =====
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 OWNER_CHAT_ID = os.environ.get("OWNER_CHAT_ID")
+# ===== Super Admins: owner + family. Add more chat_ids here as needed. =====
+SUPER_ADMIN_CHAT_IDS = [str(OWNER_CHAT_ID), "1954004101"]  # 1954004101 = Lwam
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "@MarshalomTech")   # የቻናል username ወይም ID
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "marshalom_bot")  # ያለ @
@@ -99,6 +101,15 @@ def init_db():
                 message_count INTEGER DEFAULT 1,
                 first_seen TIMESTAMP DEFAULT NOW(),
                 last_seen TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cur.execute("ALTER TABLE customers ADD COLUMN IF NOT EXISTS branch TEXT")
+        # ===== NEW: branches - admin adds/removes these freely, just like products =====
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS branches (
+                id SERIAL PRIMARY KEY,
+                name TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW()
             )
         """)
         cur.execute("""
@@ -592,8 +603,8 @@ def clear_session(chat_id):
     conn.close()
 
 def is_admin_chat(chat_id):
-    """True if this chat is the original owner OR has an active admin-password session."""
-    if str(chat_id) == str(OWNER_CHAT_ID):
+    """True if this chat is the owner, a super admin (family), OR has an active admin-password session."""
+    if str(chat_id) in SUPER_ADMIN_CHAT_IDS:
         return True
     session = get_session(chat_id)
     return session is not None and session["role"] == "admin"
@@ -726,6 +737,66 @@ def set_employee_chat_id(employee_id, chat_id):
     conn.close()
 
 # ===== NEW: የማስታወቂያ ሳጥን (Notifications) =====
+def add_branch(name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO branches (name) VALUES (%s)", (name,))
+        conn.commit()
+        result = True
+    except Exception:
+        conn.rollback()
+        result = False
+    cur.close()
+    conn.close()
+    return result
+
+def get_branches():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, name FROM branches ORDER BY name")
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [{"id": r[0], "name": r[1]} for r in rows]
+
+def delete_branch(name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM branches WHERE LOWER(name)=LOWER(%s)", (name,))
+    deleted = cur.rowcount > 0
+    conn.commit()
+    cur.close()
+    conn.close()
+    return deleted
+
+def set_customer_branch(user_id, branch_name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("UPDATE customers SET branch=%s WHERE user_id=%s", (branch_name, user_id))
+    updated = cur.rowcount > 0
+    conn.commit()
+    cur.close()
+    conn.close()
+    return updated
+
+def get_customers_by_branch(branch_name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT user_id, name, username, last_seen FROM customers WHERE branch=%s ORDER BY last_seen DESC", (branch_name,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [{"user_id": r[0], "name": r[1], "username": r[2], "last_seen": str(r[3])} for r in rows]
+
+def notify_super_admins(text, **kwargs):
+    """Sends a message to every super admin (owner + family), not just the original owner."""
+    for admin_chat_id in SUPER_ADMIN_CHAT_IDS:
+        if admin_chat_id and admin_chat_id != "None":
+            payload = {'chat_id': admin_chat_id, 'text': text}
+            payload.update(kwargs)
+            requests.post(f"{TELEGRAM_URL}/sendMessage", json=payload)
+
 def add_notification(employee_id, ntype, message):
     """Stores a notification AND pushes it instantly by Telegram DM if the
     employee has a linked chat_id (0 extra cost - just Telegram messages)."""
@@ -1380,7 +1451,7 @@ CATALOG_HTML = """
                     </div>
                 </div>
             </div>
-            <div id="homeMenuGrid" style="display:none; margin-top:12px;">
+            <div id="homeMenuGrid" style="display:block; margin-top:12px;">
                 <div class="menu-grid">
                     <div class="menu-btn" onclick="showPage('page-products')"><span class="icon">🛍️</span><span data-key="m1">ምርቶች</span></div>
                     <div class="menu-btn" onclick="showPage('page-call')"><span class="icon">📞</span><span data-key="m2">ይደውሉ</span></div>
@@ -1816,7 +1887,8 @@ function switchLanguage(lang) {
 
 function toggleHomeMenu() {
     const grid = document.getElementById('homeMenuGrid');
-    grid.style.display = grid.style.display === 'none' ? 'block' : 'none';
+    grid.style.display = 'block';
+    grid.scrollIntoView({behavior: 'smooth', block: 'start'});
 }
 
 function showPage(pageId) {
@@ -2211,7 +2283,7 @@ function renderEmployeePanel(profile, username, password) {
             <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.internal_email || ''}</div>
             <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
                 <b>💰 ደመወዝ:</b> ${profile.salary || '-'}<br>
-                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\\n/g,'<br>')}\\n/g,'<br>')}<br>
+                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\\n/g,'<br>')}<br>
                 <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\\n/g,'<br>')}<br>
                 <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\\n/g,'<br>')}
             </div>
@@ -3136,7 +3208,7 @@ ADMIN_HTML = """
 </style>
 </head>
 <body>
-<div id="app"><p class="denied">🔒 በማረጋገጥ ላይ...</p></div>
+<div id="app"><p class="denied">⏳ የአይቲ ሹክሹክታ... / IT Whispers...<br><br>💻 ሰርቨሮቻችን እርስ በእርስ እየተከራከሩ ነው፦ "የ አለቃችን ማርሻሎም ስልክ ነው!" ይላል አንዱ ሰርቨር። "አይደለም፣ የእውነተኛዋ ንግሥት የልዋም ስልክ ነው!" ይላል ሁለተኛው።<br>(Our servers are arguing with each other: "It's our boss Marshalom's phone!" says one server. "No, it's the phone of the true queen, Lwam!" says the second.)<br><br>🤖 ሳተላይቶቻችን የናንተ መሆኑን አረጋግጠው አጠቃላይ የሻሎም ቴክን ግዛት እስኪከፍቱ ድረስ ጥቂት ሰከንዶች ታገሱ...<br>(Please wait a few seconds until our satellites verify it's you and unlock the entire Shalom Tech empire...)</p></div>
 
 <script>
 const tg = window.Telegram.WebApp;
@@ -3150,7 +3222,7 @@ async function init() {
   });
   const verify = await verifyRes.json();
   if (!verify.ok) {
-    document.getElementById('app').innerHTML = '<p class="denied">🚫 ተደራሽነት የለዎትም</p>';
+    document.getElementById('app').innerHTML = `<p class="denied">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ) / Access Denied (Owner Only)<br><br>💻 ሰርቨሮቻችን ምርመራቸውን አጠናቀዋል፦ "ይህማ የአለቃችን የማርሻሎም ስልክ አይደለም! የንግሥት ልዋምም አይደለም!" በማለት በሩን ዘግተውታል።<br>(Our servers finished the check: "This is not our boss Marshalom's phone! And it's not Queen Lwam's either!" and they locked the door.)</p>`;
     return;
   }
   render();
@@ -3682,14 +3754,14 @@ def index():
         if text == '/calladmin':
             req_id, room_name = create_call_request(chat_id, name, 'admin')
             requests.post(url, json={'chat_id': chat_id, 'text': f"📞 ጥያቄዎ ወደ አድሚን ተልኳል፣ ማጽደቅ በመጠበቅ ላይ (#{req_id})።"})
-            requests.post(url, json={'chat_id': OWNER_CHAT_ID, 'text': f"📞 {name} ጥሪ ጠይቋል!\nለማጽደቅ፡ /approvecall {req_id}\nለመከልከል፡ /rejectcall {req_id}"})
+            notify_super_admins(f"📞 {name} ጥሪ ጠይቋል!\nለማጽደቅ፡ /approvecall {req_id}\nለመከልከል፡ /rejectcall {req_id}")
             return "OK"
 
         # /callteam - employee requests an approved call with their team leader
         if text == '/callteam':
             req_id, room_name = create_call_request(chat_id, name, 'team_leader')
             requests.post(url, json={'chat_id': chat_id, 'text': f"📞 ጥያቄዎ ወደ ቲም ሊደር ተልኳል፣ ማጽደቅ በመጠበቅ ላይ (#{req_id})።"})
-            requests.post(url, json={'chat_id': OWNER_CHAT_ID, 'text': f"📞 {name} ከቲም ሊደር ጋር ጥሪ ጠይቋል!\nለማጽደቅ፡ /approvecall {req_id}\nለመከልከል፡ /rejectcall {req_id}"})
+            notify_super_admins(f"📞 {name} ከቲም ሊደር ጋር ጥሪ ጠይቋል!\nለማጽደቅ፡ /approvecall {req_id}\nለመከልከል፡ /rejectcall {req_id}")
             return "OK"
 
         # ===== Admin-only commands (owner OR password-authenticated admin, any device) =====
@@ -3756,6 +3828,62 @@ def index():
                         add_notification(emp['id'], 'task', f"📋 አዲስ ስራ ተመድቦልዎታል፡ {parts[1].strip()}")
                 else:
                     requests.post(url, json={'chat_id': chat_id, 'text': "❌ ይህን ይጠቀሙ፡ /addtask username ጽሑፍ"})
+                return "OK"
+
+            # /addbranch branch_name  (admin adds a new branch/country office, free-form like products)
+            if text.startswith('/addbranch '):
+                bname = text[len('/addbranch '):].strip()
+                if bname:
+                    if add_branch(bname):
+                        requests.post(url, json={'chat_id': chat_id, 'text': f"✅ ቅርንጫፍ ተጨምሯል፡ {bname}"})
+                    else:
+                        requests.post(url, json={'chat_id': chat_id, 'text': f"⚠️ '{bname}' አስቀድሞ አለ ወይም ስህተት ተፈጥሯል።"})
+                else:
+                    requests.post(url, json={'chat_id': chat_id, 'text': "❌ ይህን ይጠቀሙ፡ /addbranch Kenya-Nairobi"})
+                return "OK"
+
+            # /branches - list all branches
+            if text == '/branches':
+                blist = get_branches()
+                if blist:
+                    listing = "\n".join([f"🏢 {b['name']}" for b in blist])
+                else:
+                    listing = "ገና ምንም ቅርንጫፍ አልተጨመረም። /addbranch ይጠቀሙ።"
+                requests.post(url, json={'chat_id': chat_id, 'text': f"🏢 ቅርንጫፎች:\n\n{listing}"})
+                return "OK"
+
+            # /removebranch branch_name
+            if text.startswith('/removebranch '):
+                bname = text[len('/removebranch '):].strip()
+                if delete_branch(bname):
+                    requests.post(url, json={'chat_id': chat_id, 'text': f"✅ ቅርንጫፍ ተሰርዟል፡ {bname}"})
+                else:
+                    requests.post(url, json={'chat_id': chat_id, 'text': f"❌ '{bname}' አልተገኘም።"})
+                return "OK"
+
+            # /setbranch user_id branch_name  (tag a customer to a branch, e.g. when they call from another country)
+            if text.startswith('/setbranch '):
+                parts = text[len('/setbranch '):].split(' ', 1)
+                if len(parts) == 2:
+                    try:
+                        target_user_id = int(parts[0].strip())
+                        set_customer_branch(target_user_id, parts[1].strip())
+                        requests.post(url, json={'chat_id': chat_id, 'text': f"✅ ደንበኛ {target_user_id} ወደ ቅርንጫፍ '{parts[1].strip()}' ተመድቧል።"})
+                    except ValueError:
+                        requests.post(url, json={'chat_id': chat_id, 'text': "❌ user_id ቁጥር መሆን አለበት።"})
+                else:
+                    requests.post(url, json={'chat_id': chat_id, 'text': "❌ ይህን ይጠቀሙ፡ /setbranch 123456789 Kenya-Nairobi"})
+                return "OK"
+
+            # /branchcustomers branch_name - list customers tagged to a branch
+            if text.startswith('/branchcustomers '):
+                bname = text[len('/branchcustomers '):].strip()
+                custs = get_customers_by_branch(bname)
+                if custs:
+                    listing = "\n".join([f"👤 {c['name']} (@{c['username']}) — {c['user_id']}" for c in custs])
+                else:
+                    listing = "ምንም ደንበኛ በዚህ ቅርንጫፍ የለም።"
+                requests.post(url, json={'chat_id': chat_id, 'text': f"🏢 {bname} ደንበኞች:\n\n{listing}"})
                 return "OK"
 
             # /tasksqueue - admin/team leader sees pending employee task requests awaiting approval
@@ -3924,10 +4052,7 @@ def index():
                     'chat_id': chat_id,
                     'text': '✅ ጥያቄዎ ደርሶናል! ስለ ዋጋ በቅርቡ በዚሁ ቦት በኩል ምላሽ ያገኛሉ። እናመሰግናለን! 🙏'
                 })
-                requests.post(url, json={
-                    'chat_id': OWNER_CHAT_ID,
-                    'text': f"💰 የዋጋ ጥያቄ ደረሰ!\n\n{info}"
-                })
+                notify_super_admins(f"💰 የዋጋ ጥያቄ ደረሰ!\n\n{info}")
                 return "OK"
 
             # Normal /start - single clear message, button label matches call-to-action
@@ -3942,22 +4067,7 @@ def index():
                 'text': '📢 ቻናላችንን ይቀላቀሉ',
                 'reply_markup': {'inline_keyboard': [[{'text': '📢 ቻናላችንን ይቀላቀሉ', 'url': 'https://t.me/MarshalomTech'}]]}
             })
-            requests.post(url, json={
-                'chat_id': chat_id,
-                'text': '📞 ስልክ ቁጥርዎን ማጋራት ይፈልጋሉ? ከታች ያለውን ቁልፍ ይጫኑ (አማራጭ ነው)',
-                'reply_markup': {
-                    'keyboard': [[
-                        {'text': '📞 ስልክ ቁጥር አጋራ', 'request_contact': True}
-                    ]],
-                    'resize_keyboard': True,
-                    'one_time_keyboard': True
-                }
-            })
-            requests.post(url, json={
-                'chat_id': OWNER_CHAT_ID,
-                'text': f"{info}\n\n🤖 *AI መልስ:*\nWELCOME_MESSAGE",
-                'parse_mode': 'Markdown'
-            })
+            notify_super_admins(f"{info}\n\n🤖 *AI መልስ:*\n{WELCOME_MESSAGE}", parse_mode='Markdown')
             return "OK"
 
         # Handle shared contact

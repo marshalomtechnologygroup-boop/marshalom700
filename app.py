@@ -974,26 +974,17 @@ def send_internal_message(sender_name, sender_username, sender_user_id, recipien
     conn.close()
 
 def get_inbox(recipient_type=None, recipient_username=None, limit=50):
-    """If recipient_type='admin', return everything. If team_leader, return only messages
-    addressed to that specific team leader's username."""
     conn = get_db_connection()
     cur = conn.cursor()
     if recipient_type == 'admin':
-    cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages ORDER BY id DESC LIMIT %s", (limit,))
-else:
-    cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s", (recipient_username, limit))
-    cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages ORDER BY id DESC LIMIT %s", (limit,))
-else:
-    cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s", (recipient_username, limit))
-            SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at
-            FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s
-        """, (recipient_username, limit))
+        cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages ORDER BY id DESC LIMIT %s", (limit,))
+    else:
+        cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s", (recipient_username, limit))
     rows = cur.fetchall()
     cur.close()
     conn.close()
     return [{"sender_name": r[0], "sender_username": r[1], "sender_user_id": r[2], "recipient_type": r[3],
              "recipient_username": r[4], "message": r[5], "created_at": str(r[6])} for r in rows]
-
 # ===== የ Applications ካታሎግ (Portfolio) =====
 def get_portfolio_apps():
     conn = get_db_connection()

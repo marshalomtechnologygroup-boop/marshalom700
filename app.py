@@ -2211,7 +2211,7 @@ function renderEmployeePanel(profile, username, password) {
             <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.internal_email || ''}</div>
             <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
                 <b>💰 ደመወዝ:</b> ${profile.salary || '-'}<br>
-                <b>🎁 ቦነስ:</b><br>${(profile.bonus || '-'}<br>
+                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\n/g,'<br>')}<br>
                 <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\n/g,'<br>')}<br>
                 <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\n/g,'<br>')}
             </div>

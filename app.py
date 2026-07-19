@@ -2574,7 +2574,16 @@ async function loadAdminPage() {
         <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📷 QR ኮድ ፎቶ:</div>
         <input type="file" id="bankQrFile" accept="image/*" class="input-field" style="padding:6px;">
         <button class="btn-primary gold" onclick="adminSaveBankQr()">💾 QR አስቀምጥ</button>
+<div class="section-title" style="margin-top:14px;">🏢 ቅርንጫፍ (Branch) አስተዳደር</div>
+        <input type="text" id="newBranchName" placeholder="ለምሳሌ፡ Kenya-Nairobi" class="input-field">
+        <button class="btn-primary gold" onclick="adminAddBranch()">➕ ቅርንጫፍ ጨምር</button>
+        <div id="adminBranchList" style="margin-bottom:10px;"><p class="empty-msg">⏳...</p></div>
 
+        <div style="font-size:10px; color:#8aa3b5; margin:6px 0 2px;">👤 ደንበኛን ወደ ቅርንጫፍ መድብ፡</div>
+        <input type="text" id="assignUserId" placeholder="የደንበኛ User ID (ቁጥር)" class="input-field">
+        <input type="text" id="assignBranchName" placeholder="የቅርንጫፍ ስም (ልክ እንደ ተጻፈው)" class="input-field">
+        <button class="btn-primary" onclick="adminAssignBranch()">✅ መድብ</button>
+        <div id="branchCustomersList" style="margin-top:8px;"></div>
         <div class="section-title" style="margin-top:14px;">🏠 የመነሻ ገጽ ማስተካከያ</div>
         <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">ራስጌ ምርጫ:</div>
         <select id="homeHeaderMode" class="input-field">
@@ -2629,6 +2638,14 @@ async function loadAdminPage() {
         <button class="btn-primary gold" onclick="adminGenerateCredentials()">🔑 Username/Password ፍጠር</button>
         <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
     `;
+    loadBranchesAdmin();
+}
+        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+    `;
+    loadBranchesAdmin();
+}
+        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+    `;
 }
 
 async function adminApproveApp(id) {
@@ -2650,7 +2667,58 @@ async function adminSaveBanks() {
         loadBanks();
     } catch(e) { alert('❌ JSON ትክክል አይደለም'); }
 }
+async function loadBranchesAdmin() {
+    const res = await fetch('/api/admin/branches', {headers:{'X-Init-Data': initData}});
+    const branches = await res.json();
+    document.getElementById('adminBranchList').innerHTML = (branches || []).map(b => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+            <span onclick="viewBranchCustomers('${b.name}')" style="cursor:pointer; color:#4a9eff;">🏢 ${b.name}</span>
+            <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteBranch('${b.name}')">🗑️</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም ቅርንጫፍ የለም</p>';
+}
+async function adminAddBranch() {
+    const name = document.getElementById('newBranchName').value.trim();
+    if (!name) { alert('ስም ያስፈልጋል'); return; }
+    const res = await fetch('/api/admin/branches', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({name})
+    });
+    const data = await res.json();
+    document.getElementById('newBranchName').value = '';
+    if (data.ok) loadBranchesAdmin();
+    else alert('❌ ስህተት ወይም ቅርንጫፍ አስቀድሞ አለ');
+}
+async function adminDeleteBranch(name) {
+    if (!confirm('እርግጠኛ ነዎት?')) return;
+    await fetch('/api/admin/branches/'+encodeURIComponent(name), {method:'DELETE', headers:{'X-Init-Data': initData}});
+    loadBranchesAdmin();
+}
+async function adminAssignBranch() {
+    const user_id = document.getElementById('assignUserId').value.trim();
+    const branch_name = document.getElementById('assignBranchName').value.trim();
+    if (!user_id || !branch_name) { alert('ID እና ቅርንጫፍ ስም ያስፈልጋል'); return; }
+    const res = await fetch('/api/admin/branches/assign', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({user_id, branch_name})
+    });
+    const data = await res.json();
+    alert(data.ok ? '✅ ደንበኛ ተመድቧል!' : '❌ ደንበኛ አልተገኘም (መጀመሪያ ቦቱን ማናገር አለበት)');
+}
+async function viewBranchCustomers(name) {
+    const res = await fetch('/api/admin/branches/'+encodeURIComponent(name)+'/customers', {headers:{'X-Init-Data': initData}});
+    const custs = await res.json();
+    document.getElementById('branchCustomersList').innerHTML = `<div class="section-title">👥 ${name} ደንበኞች</div>` + ((custs || []).map(c => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
+            👤 ${c.name || 'ስም የለም'} (@${c.username || 'የለም'}) — 🆔 ${c.user_id}
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም ደንበኛ የለም</p>');
+}
 async function adminSaveBankQr() {
+    const fileInput = document.getElementById('bankQrFile');
+    if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
+    const fileInput = document.getElementById('bankQrFile');
+}
     const fileInput = document.getElementById('bankQrFile');
     if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
     const base64 = await fileToBase64(fileInput.files[0]);
@@ -3271,6 +3339,9 @@ async function loadProducts() {
   el.innerHTML = `
     <input id="p-name" placeholder="የምርት ስም" />
     <input id="p-cat" placeholder="ምድብ (ለምሳሌ CCTV)" />
+    <input id="p-name" placeholder="የምርት ስም" />
+    <input id="p-name" placeholder="የምርት ስም" />
+    <input id="p-cat" placeholder="ምድብ (ለምሳሌ CCTV)" />
     <textarea id="p-desc" placeholder="መግለጫ"></textarea>
     <input id="p-photo" placeholder="የፎቶ ሊንክ (URL)" />
     <button class="primary" onclick="addProduct()">➕ ምርት ጨምር</button>
@@ -3318,7 +3389,50 @@ init();
 </body>
 </html>
 """
+@app.route('/api/admin/branches')
+def api_admin_branches():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_branches())
 
+@app.route('/api/admin/branches', methods=['POST'])
+def api_admin_add_branch():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    name = (body.get('name') or '').strip()
+    if not name:
+        return jsonify({"ok": False, "error": "empty name"}), 400
+    ok = add_branch(name)
+    return jsonify({"ok": ok})
+
+@app.route('/api/admin/branches/<name>', methods=['DELETE'])
+def api_admin_delete_branch(name):
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    ok = delete_branch(name)
+    return jsonify({"ok": ok})
+
+@app.route('/api/admin/branches/assign', methods=['POST'])
+def api_admin_assign_branch():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    try:
+        user_id = int(body.get('user_id'))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "invalid user_id"}), 400
+    branch_name = (body.get('branch_name') or '').strip()
+    if not branch_name:
+        return jsonify({"ok": False, "error": "empty branch"}), 400
+    updated = set_customer_branch(user_id, branch_name)
+    return jsonify({"ok": updated})
+
+@app.route('/api/admin/branches/<name>/customers')
+def api_admin_branch_customers(name):
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_customers_by_branch(name))
 @app.route('/admin')
 def admin_dashboard():
     return render_template_string(ADMIN_HTML)

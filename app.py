@@ -1783,15 +1783,15 @@ def api_ask_price():
     return jsonify({"ok": True})
 
 AI_BUSY_MESSAGE = """ ማርሻሎም (Marshalom) ረዳት
-ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 🙏
-አሁን ላይ እጅግ በጣም ብዙ ጥያቄዎችን በማስተናገድ ላይ ስለሆንን፣ ትክክለኛ ምላሽ ለእርስዎ ለመስጠት የ Shalom Technology ፍቃድ በመጠበቅ ላይ እገኛለሁ። ⏳
-አትጨነቁ! መልእክትዎ በአስተማማኝ ሁኔታ ተይዟል። 🤝✨
-⚠️ ጉዳይዎ አስቸኳይ ከሆነ፣ ይህን ቅጽ በመከተል ይላኩልን፦
+ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 
+አሁን ላይ እጅግ በጣም ብዙ ጥያቄዎችን በማስተናገድ ላይ ስለሆንን፣ ትክክለኛ ምላሽ ለእርስዎ ለመስጠት የ Shalom Technology ፍቃድ በመጠበቅ ላይ እገኛለሁ። 
+አትጨነቁ! መልእክትዎ በአስተማማኝ ሁኔታ ተይዟል። 
+ ጉዳይዎ አስቸኳይ ከሆነ፣ ይህን ቅጽ በመከተል ይላኩልን፦
 
 አስቸኳይ ብለው ይጻፉ።
 የችግሩን ወይም የጥያቄዎን ዝርዝር በአጭሩ ይግለጹ።
-(ምሳሌ፦ አስቸኳይ፣ ካሜራዬ አይሰራም ወይም ሌላ... ) 🚨
-ማሳሰቢያ፦ ይህንን የእርሶን ጉዳይ በመረዳት በቀጥታ ወደ ማርሻሎም የግል (SMS) እልካለው። ደርሶት፣ በአጭር ጊዜ ውስጥ እራሱ ይደውልልዎታል! 📱"""
+(ምሳሌ፦ አስቸኳይ፣ ካሜራዬ አይሰራም ወይም ሌላ... ) 
+ማሳሰቢያ፦ ይህንን የእርሶን ጉዳይ በመረዳት በቀጥታ ወደ ማርሻሎም የግል (SMS) እልካለው። ደርሶት፣ በአጭር ጊዜ ውስጥ እራሱ ይደውልልዎታል! """
 
 @app.route('/api/ai_chat', methods=['POST'])
 def api_ai_chat():
@@ -2111,7 +2111,11 @@ async function init() {
   });
   const verify = await verifyRes.json();
   if (!verify.ok) {
-    document.getElementById('app').innerHTML = '<p class="denied">🚫 ተደራሽነት የለዎትም</p>';
+    document.getElementById('app').innerHTML = '<p class="denied">🚫ስህተት፡ አልተጋበዝክም! ማርሻሎም ወይም ልዋም አይደለህም 
+    አስተዳዳሪም አይደለህም። እና በተሳሳተ መንገድ የመጣህ እንግዳ ነህ።
+    ሲስተሙ እየሳቀብህ ነው፤ ግን ለሞከርከው ሙከራ እናመሰግናለን!Error: You are not invited! You are not Marshalom or Lwam, and you are not an admin either.
+    So you are just a guest who arrived by mistake.
+    The system is laughing at you; but thank you for the attempt! </p>';
     return;
   }
   render();

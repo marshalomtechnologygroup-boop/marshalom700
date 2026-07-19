@@ -1782,7 +1782,7 @@ def api_ask_price():
     })
     return jsonify({"ok": True})
 
-AI_BUSY_MESSAGE = """🌟 ማርሻሎም (Marshalom) የቴክኖሎጂ ረዳት 🌟
+AI_BUSY_MESSAGE = """ ማርሻሎም (Marshalom) ረዳት
 ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 🙏
 አሁን ላይ እጅግ በጣም ብዙ ጥያቄዎችን በማስተናገድ ላይ ስለሆንን፣ ትክክለኛ ምላሽ ለእርስዎ ለመስጠት የ Shalom Technology ፍቃድ በመጠበቅ ላይ እገኛለሁ። ⏳
 አትጨነቁ! መልእክትዎ በአስተማማኝ ሁኔታ ተይዟል። 🤝✨

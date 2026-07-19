@@ -2218,9 +2218,9 @@ function renderEmployeePanel(profile, username, password) {
     </div>
     <div style="margin-top:10px; font-size:9px; color:#8aa3b5;">📷 የመገለጫ ፎቶ ቀይር:</div>
     <input type="file" id="empPhotoFile" accept="image/*" class="input-field" style="padding:6px;">
-    <button class="btn-primary" onclick="empSavePhoto('${username}', ${JSON.stringify(password)})">💾 ፎቶ አስቀምጥ</button>
+    <button class="btn-primary" onclick="empSavePhoto('${username}', '${typeof password !== 'undefined' ? password : ''}')">💾 ፎቶ አስቀምጥ</button>
     <div class="section-title" style="margin-top:10px;">📩 መልዕክቶች</div>
-    <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">ገቢ መልዕክቶች</button>
+    <button class="btn-primary" onclick="empLoadInbox('${username}', '${typeof password !== 'undefined' ? password : ''}')">ገቢ መልዕክቶች</button>
     <div id="empInboxList"></div>
 `;
 }

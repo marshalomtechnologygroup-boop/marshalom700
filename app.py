@@ -974,17 +974,23 @@ def send_internal_message(sender_name, sender_username, sender_user_id, recipien
     conn.close()
 
 def get_inbox(recipient_type=None, recipient_username=None, limit=50):
+    """If recipient_type='admin', return everything. If team_leader, return only messages
+    addressed to that specific team leader's username."""
     conn = get_db_connection()
     cur = conn.cursor()
     if recipient_type == 'admin':
         cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages ORDER BY id DESC LIMIT %s", (limit,))
     else:
-        cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s", (recipient_username, limit))
+        cur.execute("""
+            SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at
+            FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s
+        """, (recipient_username, limit))
     rows = cur.fetchall()
     cur.close()
     conn.close()
     return [{"sender_name": r[0], "sender_username": r[1], "sender_user_id": r[2], "recipient_type": r[3],
              "recipient_username": r[4], "message": r[5], "created_at": str(r[6])} for r in rows]
+
 # ===== የ Applications ካታሎግ (Portfolio) =====
 def get_portfolio_apps():
     conn = get_db_connection()
@@ -1234,6 +1240,7 @@ CATALOG_HTML = """
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
     body { background: #0b1219; min-height: 100vh; color: #fff; }
     .app-container { max-width: 420px; width: 100%; margin: 0 auto; min-height: 100vh; background: #17212b; overflow: hidden; padding: 14px; position: relative; }
+
     .header { text-align: center; padding-bottom: 12px; border-bottom: 1px solid #2b3a4a; margin-bottom: 12px; }
     .header .top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
     .header .lang-selector { display: flex; gap: 4px; }
@@ -1244,7 +1251,12 @@ CATALOG_HTML = """
     @keyframes blinkSlow { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
     .phone-pulse { animation: phonePulse 1.4s ease-in-out infinite; display: inline-block; }
     @keyframes phonePulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
-    @keyframes logoSpin { 0% { transform: rotateY(0deg) rotateX(0deg); } 25% { transform: rotateY(360deg) rotateX(0deg); } 50% { transform: rotateY(360deg) rotateX(360deg); } 100% { transform: rotateY(360deg) rotateX(360deg); } }
+    @keyframes logoSpin {
+        0% { transform: rotateY(0deg) rotateX(0deg); }
+        25% { transform: rotateY(360deg) rotateX(0deg); }
+        50% { transform: rotateY(360deg) rotateX(360deg); }
+        100% { transform: rotateY(360deg) rotateX(360deg); }
+    }
     .menu-btn { transition: transform 0.2s ease; }
     .menu-btn:active { transform: scale(0.93); }
     .menu-btn .icon { transition: transform 0.3s ease; display: inline-block; }
@@ -1258,12 +1270,14 @@ CATALOG_HTML = """
     .fullscreen-overlay .close-fs { position:absolute; top:20px; right:20px; font-size:28px; color:#fff; cursor:pointer; }
     .header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(90deg,#4a9eff,#7ac7ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-top: 4px; }
     .header .sub { font-size: 11px; color: #8aa3b5; }
+
     .pages { padding: 6px 0 80px; }
     .page { display: none; animation: fadeSlide 0.25s ease; }
     .page.active { display: block; }
     @keyframes fadeSlide { 0% { opacity: 0; transform: translateY(10px); } 100% { opacity: 1; transform: translateY(0); } }
     .page-title { font-size: 15px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
     .back-btn { background: rgba(255,255,255,0.08); border: none; color: #fff; font-size: 18px; padding: 2px 12px; border-radius: 30px; cursor: pointer; }
+
     .menu-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 12px; }
     .menu-btn { border-radius: 14px; padding: 10px 4px; text-align: center; font-size: 9px; font-weight: 500; cursor: pointer; color: #e0edf5; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
     .menu-btn .icon { font-size: 22px; display: block; margin-bottom: 2px; }
@@ -1284,6 +1298,7 @@ CATALOG_HTML = """
     .menu-btn:nth-child(15){background:linear-gradient(135deg,#1a2a4a,#0a1a3a);}
     .menu-btn:nth-child(16){background:linear-gradient(135deg,#3a2a5a,#2a1a4a);}
     .menu-btn:nth-child(17){background:linear-gradient(135deg,#4a2a3a,#3a1a2a);}
+
     .section-title { color: #b8a84a; font-size: 13px; font-weight: 600; margin-bottom: 8px; }
     .product-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
     .product-card { background: rgba(255,255,255,0.04); border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 6px 18px rgba(0,0,0,0.25); transition: transform 0.2s ease; }
@@ -1295,14 +1310,17 @@ CATALOG_HTML = """
     .product-card .ask-btn { width: 100%; padding: 7px; border: none; border-radius: 10px; color: #fff; font-weight: 700; font-size: 10px; cursor: pointer; background: linear-gradient(135deg,#4a9eff,#2a7adf); box-shadow: 0 4px 12px rgba(74,158,255,0.3); }
     .channel-link { padding: 8px; background: rgba(74,158,255,0.08); border-radius: 12px; text-align: center; border: 1px dashed #4a9eff; margin-bottom: 10px; }
     .channel-link a { color: #4a9eff; font-weight: 600; text-decoration: none; font-size: 12px; }
+
     .promo-banner { background: linear-gradient(135deg,#4a2a2a,#3a1a1a); border-radius: 12px; padding: 10px 14px; margin-top: 10px; display: flex; align-items: center; gap: 10px; border: 1px solid #4a3a1a; }
     .promo-banner .text { font-size: 12px; color: #c0d8e8; flex: 1; font-weight: 600; }
+
     .bottom-nav-wrap { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); max-width: 420px; width: 100%; background: rgba(15,26,36,0.96); backdrop-filter: blur(14px); border-top: 1px solid #2b3a4a; padding: 8px 0 14px; overflow: hidden; }
     .bottom-nav { display: flex; width: max-content; animation: tickerScroll 14s linear infinite; }
     @keyframes tickerScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     .nav-item { color: #6a8a9e; font-size: 8px; text-align: center; cursor: pointer; padding: 2px 6px; flex: 0 0 25%; box-sizing: border-box; }
     .nav-item.active { color: #4a9eff; }
     .nav-item .icon { font-size: 16px; display: block; }
+
     .btn-primary { background: #4a9eff; border: none; border-radius: 30px; padding: 10px; color: #fff; font-weight: 600; font-size: 13px; width: 100%; cursor: pointer; margin-top: 4px; }
     .btn-primary.gold { background: #b8a84a; color: #1a1a2e; }
     .shimmer-btn { position: relative; overflow: hidden; background: linear-gradient(135deg,#4a9eff,#2a7adf); color: #fff; font-size: 15px; font-weight: 700; padding: 14px 20px; border-radius: 40px; width: 100%; border: none; cursor: pointer; box-shadow: 0 8px 26px rgba(74,158,255,0.45); }
@@ -1346,6 +1364,7 @@ CATALOG_HTML = """
                     <img src="/static/logo.jpg" style="width:84px; height:84px; border-radius:20px; object-fit:cover; box-shadow:0 8px 26px rgba(74,158,255,0.35); animation: logoSpin 6s ease-in-out infinite;" />
                     <div id="homeHeaderSlot" style="color:#fff; font-size:19px; font-weight:700; margin-top:12px;" class="blink-slow">Shalom Technology</div>
                     <div style="color:#9bb0c0; font-size:11px; margin-top:2px; letter-spacing:0.5px;">✨ የእርስዎ የደህንነት አጋር ✨</div>
+
                     <div style="background:rgba(255,255,255,0.04); border-radius:18px; padding:16px 14px; border:1px solid rgba(255,255,255,0.06); margin-top:18px;">
                         <div style="color:#fff; font-size:15px; font-weight:700; margin-bottom:6px;">Welcome!</div>
                         <div style="color:#fff; font-size:12px; line-height:1.9;">እንኳን ደህና መጡ! ✨</div>
@@ -1354,6 +1373,7 @@ CATALOG_HTML = """
                         <div style="width:60px; height:2px; background:linear-gradient(90deg,transparent,#4a9eff,transparent); margin:10px auto;"></div>
                         <div style="color:#b8c8d8; font-size:11px; line-height:1.6;">የእኛ ሙሉ አገልግሎት ለማየት ከታች ይጫኑ 👇</div>
                     </div>
+
                     <button class="shimmer-btn" style="margin-top:16px;" onclick="toggleHomeMenu()">🚀 እዚህ ይጫኑ / OPEN</button>
                     <div style="color:#6a8a9e; font-size:10px; margin-top:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:4px 8px;">
                         <span>ለመክፈት እዚህ ጠቅ ያድርጉ</span><span>•</span><span>ንምክፋት ጠውቕ</span><span>•</span><span>Banuuf tuqi</span>
@@ -1580,16 +1600,19 @@ CATALOG_HTML = """
         <!-- LOGIN -->
         <div class="page" id="page-feedback">
             <div class="page-title"><button class="back-btn" onclick="showPage('page-home')">‹</button>💬 <span id="feedbackTitle">አስተያየት እና ምስክርነት</span></div>
+
             <div style="background:rgba(255,255,255,0.03); border-radius:12px; padding:10px; margin-bottom:10px;">
                 <div style="color:#b8a84a; font-size:12px; font-weight:600; margin-bottom:6px;">✍️ የእርስዎን አስተያየት ይላኩ (ለሁሉም ይታያል)</div>
                 <textarea id="testimonialInput" class="input-field" rows="2" placeholder="ስለ አገልግሎታችን ምን ይላሉ?"></textarea>
                 <button class="btn-primary" onclick="submitTestimonial()">📤 ላክ</button>
             </div>
+
             <div style="background:rgba(74,158,255,0.04); border-radius:12px; padding:10px; margin-bottom:10px; border:1px solid rgba(74,158,255,0.08);">
                 <div style="color:#4a9eff; font-size:12px; font-weight:600; margin-bottom:6px;">📩 ወደ አድሚን/ቲም ሊደር የግል መልእክት</div>
                 <textarea id="privateMessageInput" class="input-field" rows="2" placeholder="መልእክትዎን ይጻፉ..."></textarea>
                 <button class="btn-primary gold" onclick="submitPrivateMessage()">📤 ላክ (ወደ አድሚን)</button>
             </div>
+
             <div class="section-title">🌟 የደንበኞቻችን ምስክርነት</div>
             <div id="testimonialsList"><p class="empty-msg">⏳...</p></div>
         </div>
@@ -1654,13 +1677,101 @@ let currentLang = 'am';
 let allProducts = [];
 let teamLeaderCreds = null;
 
-const translations = { /* ... ሙሉው ትርጉም እዚህ አለ ... */ };
+const translations = {
+    am: {
+        title:'Shalom Technology', sub:'✨ የእርስዎ የደህንነት አጋር ✨',
+        m1:'ምርቶች',m2:'ይደውሉ',m3:'ማህበራዊ',m4:'ማጋሪያ',m5:'ዜና',m6:'ንጽጽር',m7:'ክፍት ስራ',m8:'ቅናሽ',
+        m9:'ረዳት',m10:'ድጋፍ',m11:'ማስታወቂያ',m12:'ምክሮች',m13:'ባንክ',m14:'መግቢያ',m15:'አድሚን',m16:'ቲም ሊደር',m17:'ሰራተኛ',
+        n1:'መነሻ',n2:'ምርቶች',n3:'ረዳት',n4:'አጋራ',n5:'ስራ',
+        pTitle:'🛍️ ምርቶች', channelText:'ተጨማሪ ምርቶች ለማየት ቻናላችንን ይቀላቀሉ',
+        callTitle:'ይደውሉ', callLabel1:'ኢትዮ ቴሌኮም', callLabel2:'ሳፋሪኮም',
+        socialTitle:'ማህበራዊ', shareTitle:'ማጋሪያ',
+        shareWelcomeTitle:'✨ እንኳን ደህና መጡ ወደ Shalom Technology! ✨', shareWelcomeText:'ይህንን ቦት ለጓደኞችዎ ያጋሩ!',
+        shareBtn:'📤 ቻናላችንን ያጋሩ (Telegram ይምረጡ)',
+        newsTitle:'ዜና', applicationsTitle:'Applications', feedbackTitle:'አስተያየት እና ምስክርነት',
+        jobsTitle:'ክፍት ስራ', jobsApply:'📝 አሁን አመልክት', jobsEmpty:'ለጊዜው ክፍት የስራ ቦታ የለም',
+        discountTitle:'ቅናሽ', aiTitle:'ረዳት', supportTitle:'ድጋፍ', supportSub:'24/7 ደንበኛ ድጋፍ',
+        promoTitle:'ማስታወቂያ', promoEmpty:'ለጊዜው ማስታወቂያ የለም',
+        tipsTitle:'ምክሮች', banksTitle:'ባንክ',
+        loginTitle:'መግቢያ', loginSub:'ለቲም ሊደር እና ሰራተኞች (ባለቤት ራሱ በራስ-ሰር ይታወቃል)', loginBtn:'🔓 ግባ',
+        adminTitle:'አድሚን', tlTitle:'ቲም ሊደር', empTitle:'ሰራተኛ',
+        askPrice:'💬 ዋጋ ጠይቁ', askSent:'✅ ጥያቄዎ ተልኳል!',
+        phonePlaceholder:'ስልክ ቁጥርዎን ያስገቡ', applyBtn:'📝 አመልክት', applySent:'✅ ማመልከቻዎ ተልኳል!',
+        wrongLogin:'❌ የተሳሳተ username ወይም password', mustChangePw:'🔐 መጀመሪያ password ይቀይሩ:',
+        setPwBtn:'✅ Password ቀይር', pwChanged:'✅ Password ተቀይሯል!'
+    },
+    en: {
+        title:'Shalom Technology', sub:'✨ Your Security Partner ✨',
+        m1:'Products',m2:'Call',m3:'Social',m4:'Share',m5:'News',m6:'Compare',m7:'Jobs',m8:'Discount',
+        m9:'Assistant',m10:'Support',m11:'Promo',m12:'Tips',m13:'Banks',m14:'Login',m15:'Admin',m16:'Team Leader',m17:'Employee',
+        n1:'Home',n2:'Products',n3:'Assistant',n4:'Share',n5:'Jobs',
+        pTitle:'🛍️ Products', channelText:'Join our channel for more products',
+        callTitle:'Call', callLabel1:'Ethio Telecom', callLabel2:'Safaricom',
+        socialTitle:'Social', shareTitle:'Share',
+        shareWelcomeTitle:'✨ Welcome to Shalom Technology! ✨', shareWelcomeText:'Share this bot with your friends!',
+        shareBtn:'📤 Share our channel (choose Telegram)',
+        newsTitle:'News', applicationsTitle:'Applications', feedbackTitle:'Feedback & Testimonials',
+        jobsTitle:'Jobs', jobsApply:'📝 Apply Now', jobsEmpty:'No open positions right now',
+        discountTitle:'Discount', aiTitle:'Assistant', supportTitle:'Support', supportSub:'24/7 Customer Support',
+        promoTitle:'Promo', promoEmpty:'No promotions right now',
+        tipsTitle:'Tips', banksTitle:'Banks',
+        loginTitle:'Login', loginSub:'For Team Leader & Employees (Owner is auto-detected)', loginBtn:'🔓 Login',
+        adminTitle:'Admin', tlTitle:'Team Leader', empTitle:'Employee',
+        askPrice:'💬 Ask Price', askSent:'✅ Request sent!',
+        phonePlaceholder:'Enter your phone number', applyBtn:'📝 Apply', applySent:'✅ Application sent!',
+        wrongLogin:'❌ Wrong username or password', mustChangePw:'🔐 Please set a new password first:',
+        setPwBtn:'✅ Change Password', pwChanged:'✅ Password changed!'
+    },
+    ti: {
+        title:'Shalom Technology', sub:'✨ ናይ ሓልዎት ኣጋርኩም ✨',
+        m1:'ምርቶች',m2:'ደውሉ',m3:'ማህበራዊ',m4:'ኣጋሩ',m5:'ዜና',m6:'ንጽጽር',m7:'ስራ',m8:'ቅናሽ',
+        m9:'ረዳት',m10:'ድጋፍ',m11:'ማስታወቂያ',m12:'ምኽርታት',m13:'ባንክ',m14:'ምእታው',m15:'ኣድሚን',m16:'መራሒ ጉጅለ',m17:'ሰራተኛ',
+        n1:'መነሻ',n2:'ምርቶች',n3:'ረዳት',n4:'ኣጋሩ',n5:'ስራ',
+        pTitle:'🛍️ ምርቶች', channelText:'ካልኦት ምርትታት ንምርኣይ ቻናልና ተጸንበሩ',
+        callTitle:'ደውሉ', callLabel1:'ኢትዮ ተለኮም', callLabel2:'ሳፋሪኮም',
+        socialTitle:'ማህበራዊ', shareTitle:'ኣጋሩ',
+        shareWelcomeTitle:'✨ ናብ Shalom Technology ብደሓን መጻእኩም! ✨', shareWelcomeText:'ነዚ ቦት ንመሓዙትኩም ኣጋሩ!',
+        shareBtn:'📤 ቻናልና ኣጋሩ',
+        newsTitle:'ዜና', applicationsTitle:'Applications', feedbackTitle:'ርእይቶን ምስክርነትን',
+        jobsTitle:'ክፍቲ ስራሕ', jobsApply:'📝 ሕጂ ኣመልክቱ', jobsEmpty:'ሕጂ ክፍቲ ቦታ የለን',
+        discountTitle:'ቅናሽ', aiTitle:'ረዳት', supportTitle:'ደገፍ', supportSub:'24/7 ደገፍ ዓሚል',
+        promoTitle:'ማስታወቂያ', promoEmpty:'ሕጂ ማስታወቂያ የለን',
+        tipsTitle:'ምኽርታት', banksTitle:'ባንክ',
+        loginTitle:'ምእታው', loginSub:'ንመራሒ ጉጅለን ሰራተኛታትን', loginBtn:'🔓 እቶ',
+        adminTitle:'ኣድሚን', tlTitle:'መራሒ ጉጅለ', empTitle:'ሰራተኛ',
+        askPrice:'💬 ዋጋ ሕተት', askSent:'✅ ተላኢኹ!',
+        phonePlaceholder:'ቁጽሪ ስልኪ ኣእትዉ', applyBtn:'📝 ኣመልክት', applySent:'✅ ማመልከቻ ተላኢኹ!',
+        wrongLogin:'❌ ግጉይ username ወይ password', mustChangePw:'🔐 መጀመርታ password ቀይሩ:',
+        setPwBtn:'✅ Password ቀይር', pwChanged:'✅ ተቐይሩ!'
+    },
+    or: {
+        title:'Shalom Technology', sub:'✨ Michuu Nageenya Keessanii ✨',
+        m1:'Oomishaalee',m2:'Bilbilaa',m3:'Hawaasa',m4:'Qooda',m5:'Oduu',m6:'Madaalii',m7:'Hojii',m8:'Hir\u2019aa',
+        m9:'Gargaaraa',m10:'Deggersa',m11:'Beeksisa',m12:'Gorsa',m13:'Baankii',m14:'Seensa',m15:'Admin',m16:'Hoogganaa',m17:'Hojjetaa',
+        n1:'Mana',n2:'Oomishaalee',n3:'Gargaaraa',n4:'Qooda',n5:'Hojii',
+        pTitle:'🛍️ Oomishaalee', channelText:'Oomisha dabalataaf channel keenya hordofaa',
+        callTitle:'Bilbilaa', callLabel1:'Ethio Telecom', callLabel2:'Safaricom',
+        socialTitle:'Hawaasa', shareTitle:'Qooda',
+        shareWelcomeTitle:'✨ Baga Nagaan Dhuftan Shalom Technology! ✨', shareWelcomeText:'Bot kana hiriyoota keessaniif qoodaa!',
+        shareBtn:'📤 Channel keenya qoodaa',
+        newsTitle:'Oduu', applicationsTitle:'Applications', feedbackTitle:'Yaada fi Ragaa',
+        jobsTitle:'Hojii Banaa', jobsApply:'📝 Amma Iyyadhu', jobsEmpty:'Yeroo ammaa hojiin banaan hin jiru',
+        discountTitle:'Hir\u2019aa', aiTitle:'Gargaaraa', supportTitle:'Deggersa', supportSub:'Deggersa Maamilaa 24/7',
+        promoTitle:'Beeksisa', promoEmpty:'Yeroo ammaa beeksisni hin jiru',
+        tipsTitle:'Gorsa', banksTitle:'Baankii',
+        loginTitle:'Seensa', loginSub:'Hoogganaa fi Hojjettootaaf', loginBtn:'🔓 Seeni',
+        adminTitle:'Admin', tlTitle:'Hoogganaa', empTitle:'Hojjetaa',
+        askPrice:'💬 Gaafii Gatii', askSent:'✅ Ergameera!',
+        phonePlaceholder:'Lakkoofsa bilbila keessan galchaa', applyBtn:'📝 Iyyadhu', applySent:'✅ Iyyannoon ergameera!',
+        wrongLogin:'❌ username ykn password dogongora', mustChangePw:'🔐 Duraan dursanii password haaraa qopheessaa:',
+        setPwBtn:'✅ Password Jijjiiri', pwChanged:'✅ Jijjiirameera!'
+    }
+};
 
 function setText(id, value) {
     const el = document.getElementById(id);
     if (el && value !== undefined) el.textContent = value;
 }
-
 function switchLanguage(lang) {
     currentLang = lang;
     const t = translations[lang];
@@ -1671,7 +1782,30 @@ function switchLanguage(lang) {
         const key = el.dataset.key;
         if (t[key]) el.textContent = t[key];
     });
-    // ... ሁሉም ሌሎች setText ጥሪዎች ...
+    setText('pTitle', t.pTitle);
+    setText('channelText', t.channelText);
+    setText('callTitle', t.callTitle);
+    setText('callLabel1', t.callLabel1);
+    setText('callLabel2', t.callLabel2);
+    setText('socialTitle', t.socialTitle);
+    setText('shareTitle', t.shareTitle);
+    setText('shareWelcomeTitle', t.shareWelcomeTitle);
+    setText('shareWelcomeText', t.shareWelcomeText);
+    setText('shareBtn', t.shareBtn);
+    setText('newsTitle', t.newsTitle);
+    setText('applicationsTitle', t.applicationsTitle || 'Applications');
+    setText('jobsTitle', t.jobsTitle);
+    setText('discountTitle', t.discountTitle);
+    setText('aiTitle', t.aiTitle);
+    setText('supportTitle', t.supportTitle);
+    setText('supportSub', t.supportSub);
+    setText('promoTitle', t.promoTitle);
+    setText('tipsTitle', t.tipsTitle);
+    setText('banksTitle', t.banksTitle);
+    setText('feedbackTitle', t.feedbackTitle || 'አስተያየት እና ምስክርነት');
+    setText('adminTitle', t.adminTitle);
+    setText('tlTitle', t.tlTitle);
+    setText('empTitle', t.empTitle);
     renderProducts();
     renderPromos();
     renderJobs();
@@ -1699,7 +1833,913 @@ function showPage(pageId) {
     if (pageId === 'page-admin') loadAdminPage();
 }
 
-// ... ሁሉም ሌሎች ተግባራት (loadProducts, renderProducts, loadJobs, renderJobs, loadPromos, renderPromos, loadBanks, loadSocial, loadApplications, loadTestimonials, submitTestimonial, submitPrivateMessage, shareChannel, sendAIMessage, employeeLogin, renderEmployeePanel, teamLeaderLogin, renderTeamLeaderPanel, loadAdminPage, adminApproveApp, adminRejectApp, adminSaveBanks, adminSaveBankQr, adminAddApplication, adminSaveHomeSettings, adminSaveSocial, adminLoadTestimonialsMod, adminDeleteTestimonial, adminResetEmpPassword, adminDeleteEmployee, adminLoadInbox, adminGenerateCredentials, adminAddProduct, fileToBase64, adminDeleteProduct, adminAddJob, adminDeleteJob) ...
+// ===== PRODUCTS =====
+async function loadProducts() {
+    const res = await fetch('/api/products');
+    allProducts = await res.json();
+    renderProducts();
+}
+function renderProducts() {
+    const t = translations[currentLang];
+    const el = document.getElementById('productGrid');
+    if (!allProducts.length) { el.innerHTML = '<p class="empty-msg">...</p>'; return; }
+    el.innerHTML = allProducts.map((p, idx) => `
+        <div class="product-card" style="animation-delay:${idx * 0.08}s;">
+            <img class="promo-img" src="${p.photo_url || '/static/logo.jpg'}" onclick='openFullscreen(${JSON.stringify(p.photo_url || "/static/logo.jpg")}, ${JSON.stringify(p.name)})' />
+            <div class="info">
+                <div class="name">${p.name}</div>
+                <div class="desc">${p.description || ''}</div>
+                <button class="ask-btn" onclick='askPrice(${p.id}, ${JSON.stringify(p.name)})'>${t.askPrice}</button>
+            </div>
+        </div>
+    `).join('');
+}
+function openFullscreen(photoUrl, name) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fullscreen-overlay';
+    overlay.innerHTML = `<span class="close-fs" onclick="this.parentElement.remove()">✕</span><img src="${photoUrl}"/><div style="color:#fff; margin-top:12px; font-size:14px; font-weight:600;">${name}</div>`;
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    document.body.appendChild(overlay);
+}
+// Rotate product display order every 8 hours (client-side, while catalog stays open across sessions)
+function maybeRotateProducts() {
+    const lastRotate = parseInt(localStorage_fallback('lastProductRotate') || '0');
+    const now = Date.now();
+    if (now - lastRotate > 8 * 60 * 60 * 1000 && allProducts.length > 1) {
+        allProducts.push(allProducts.shift());
+        renderProducts();
+    }
+}
+let _memoryStore = {};
+function localStorage_fallback(key, value) {
+    if (value !== undefined) { _memoryStore[key] = value; return; }
+    return _memoryStore[key];
+}
+async function askPrice(productId, productName) {
+    const t = translations[currentLang];
+    await fetch('/api/ask_price', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({initData, product_id: productId, product_name: productName})
+    });
+    alert(t.askSent);
+}
+
+// ===== JOBS =====
+async function loadJobs() {
+    const res = await fetch('/api/jobs');
+    window._jobs = await res.json();
+    renderJobs();
+}
+function renderJobs() {
+    const t = translations[currentLang];
+    const el = document.getElementById('jobsList');
+    const jobs = window._jobs || [];
+    if (!jobs.length) { el.innerHTML = `<p class="empty-msg">${t.jobsEmpty}</p>`; return; }
+    el.innerHTML = jobs.map(j => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:10px; padding:8px; margin-bottom:6px; border-left:4px solid #4a9eff;">
+            <h3 style="color:#fff; font-size:12px;">${j.title}</h3>
+            <p style="color:#9bb0c0; font-size:10px;">${j.location || ''}</p>
+            <p style="color:#c0d8e8; font-size:10px; margin-top:4px;">${j.description || ''}</p>
+            ${j.pdf_url ? `<a href="${j.pdf_url}" download="job_details.pdf" class="ask-btn" style="display:block; text-decoration:none; box-sizing:border-box; margin-top:6px;">📄 ዝርዝር PDF አውርድ</a>` : ''}
+            <input type="text" id="phone-${j.id}" placeholder="${t.phonePlaceholder}" class="input-field" style="margin-top:6px;">
+            <input type="email" id="email-${j.id}" placeholder="Gmail / Email" class="input-field">
+            <input type="text" id="idnum-${j.id}" placeholder="የመታወቂያ ቁጥር (ID Number)" class="input-field">
+            <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">📸 ሰልፊ ፎቶ (አማራጭ)</div>
+            <input type="file" id="selfie-${j.id}" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary" onclick="applyJob(${j.id}, ${JSON.stringify(j.title)})">${t.applyBtn}</button>
+        </div>
+    `).join('');
+}
+async function applyJob(jobId, jobTitle) {
+    const t = translations[currentLang];
+    const phone = document.getElementById('phone-' + jobId).value;
+    const email = document.getElementById('email-' + jobId).value;
+    const id_number = document.getElementById('idnum-' + jobId).value;
+    const selfieInput = document.getElementById('selfie-' + jobId);
+    let selfie_photo = null;
+    if (selfieInput.files && selfieInput.files[0]) {
+        selfie_photo = await fileToBase64(selfieInput.files[0]);
+    }
+    await fetch('/api/jobs/apply', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({initData, job_id: jobId, job_title: jobTitle, phone, email, id_number, selfie_photo})
+    });
+    alert(t.applySent);
+}
+
+// ===== PROMOS =====
+async function loadPromos() {
+    const res = await fetch('/api/promos');
+    window._promos = await res.json();
+    renderPromos();
+    renderDiscount();
+}
+function renderPromos() {
+    const t = translations[currentLang];
+    const el = document.getElementById('promoList');
+    const promos = (window._promos || []).slice(0, 3);
+    if (!promos.length) { el.innerHTML = `<p class="empty-msg">${t.promoEmpty}</p>`; return; }
+    const promoPhotos = ['/static/product1.jpg', '/static/product3.jpg', '/static/product5.jpg'];
+    el.innerHTML = promos.map((p, i) => `
+        <div class="promo-anim-card" style="display:flex; gap:8px; align-items:center; background:rgba(255,255,255,0.03); border-radius:10px; padding:8px; border-left:4px solid #4a9eff; margin-bottom:6px;">
+            <div style="flex:1; color:#c0d8e8; font-size:11px;">${p[currentLang] || p.am}</div>
+            <img src="${promoPhotos[i % promoPhotos.length]}" style="width:60px; height:60px; border-radius:8px; object-fit:cover; flex-shrink:0;" />
+        </div>
+    `).join('');
+    const homeText = document.getElementById('homePromoText');
+    if (promos.length && homeText) homeText.textContent = (promos[0][currentLang] || promos[0].am);
+}
+function renderDiscount() {
+    const promos = window._promos || [];
+    const el = document.getElementById('discountContent');
+    if (promos.length) {
+        el.textContent = promos[0][currentLang] || promos[0].am;
+    } else {
+        el.textContent = currentLang === 'en' ? 'No active discount right now' : 'ለጊዜው ንቁ ቅናሽ የለም';
+    }
+}
+
+// ===== BANKS =====
+const DEFAULT_SOCIAL = [
+    {icon: '🎵', name: 'TikTok', url: 'https://tiktok.com/@marshalomcctv'},
+    {icon: '▶️', name: 'YouTube', url: 'https://youtube.com/@ShalomTechnology'},
+    {icon: '📘', name: 'Facebook', url: 'https://facebook.com/share/1YEeCpFBgp'},
+    {icon: '📸', name: 'Instagram', url: 'https://instagram.com/marshalom'},
+    {icon: '🐦', name: 'Twitter/X', url: 'https://twitter.com/marshalom'},
+    {icon: '💼', name: 'LinkedIn', url: 'https://linkedin.com/company/marshalom'}
+];
+async function loadHomeSettings() {
+    const res = await fetch('/api/config/home_settings');
+    const settings = await res.json();
+    const headerMode = (settings && settings.header_mode) || 'text';
+    const bgPhotos = (settings && settings.bg_photos) || [];
+
+    const slot = document.getElementById('homeHeaderSlot');
+    if (headerMode === 'phone') {
+        slot.className = 'phone-pulse';
+        slot.innerHTML = '📞 <a href="tel:0931556590" style="color:#4a9eff; text-decoration:none;">0931556590</a>';
+    } else {
+        slot.className = 'blink-slow';
+        slot.textContent = 'Shalom Technology';
+    }
+
+    const bgImg = document.getElementById('homeHeroBg');
+    if (bgPhotos.length) {
+        let idx = 0;
+        bgImg.style.display = 'block';
+        bgImg.src = bgPhotos[0];
+        if (bgPhotos.length > 1) {
+            setInterval(() => {
+                idx = (idx + 1) % bgPhotos.length;
+                bgImg.src = bgPhotos[idx];
+            }, 8000);
+        }
+    }
+}
+
+async function loadSocial() {
+    const res = await fetch('/api/config/social');
+    let links = await res.json();
+    if (!links || !links.length) links = DEFAULT_SOCIAL;
+    document.getElementById('socialGrid').innerHTML = links.map(s => `
+        <a href="${s.url}" target="_blank" class="card-box" style="text-decoration:none; color:inherit;">
+            <span style="font-size:24px; display:block;">${s.icon}</span>
+            <span style="font-size:8px; color:#c0d8e8;">${s.name}</span>
+        </a>
+    `).join('');
+}
+
+const DEFAULT_BANKS = [
+    {bank: 'የንግድ ባንክ', number: '1000453578058', owner: 'Marshalom Tesfay'},
+    {bank: 'ቴሌብር 1', number: '0931556590', owner: 'Marshalom Tesfay'},
+    {bank: 'ቴሌብር 2', number: '0967386958', owner: 'Lwam Alem'},
+    {bank: 'አዋሽ ባንክ 1', number: '01320877386700', owner: 'Marshalom Tesfay'},
+    {bank: 'አዋሽ ባንክ 2', number: '01320779250100', owner: 'Lwam Alem'}
+];
+async function loadBanks() {
+    const res = await fetch('/api/config/banks');
+    let banks = await res.json();
+    if (!banks || !banks.length) banks = DEFAULT_BANKS;
+    const qrRes = await fetch('/api/config/bank_qr');
+    const qr = await qrRes.json();
+    const el = document.getElementById('banksList');
+    el.innerHTML = banks.map(b => `
+        <div class="card-box" style="cursor:default; text-align:left; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="color:#b8a84a; font-weight:600; font-size:12px;">${b.bank}</div>
+                <div style="color:#fff; font-size:14px; font-weight:700;">${b.number}</div>
+                <div style="color:#8aa3b5; font-size:10px;">${b.owner}</div>
+            </div>
+            <button onclick="copyBankNumber('${b.number}', this)" style="background:#2b3a4a; border:none; color:#4a9eff; padding:6px 10px; border-radius:8px; font-size:10px;">📋 ኮፒ</button>
+        </div>
+    `).join('');
+    if (qr) {
+        el.innerHTML += `<div style="text-align:center; margin-top:10px;"><img src="${qr}" style="width:160px; border-radius:10px;" /><div style="font-size:10px; color:#8aa3b5; margin-top:4px;">QR ኮድ ተጠቅመው ይክፍሉ</div></div>`;
+    }
+}
+function copyBankNumber(number, btn) {
+    navigator.clipboard.writeText(number).then(() => {
+        const original = btn.textContent;
+        btn.textContent = '✅ ተኮፒዷል!';
+        setTimeout(() => { btn.textContent = original; }, 1500);
+    }).catch(() => {
+        // Fallback for older webviews without clipboard API
+        const ta = document.createElement('textarea');
+        ta.value = number;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = '✅ ተኮፒዷል!';
+        setTimeout(() => { btn.textContent = '📋 ኮፒ'; }, 1500);
+    });
+}
+
+// ===== APPLICATIONS (Portfolio) =====
+async function loadApplications() {
+    const res = await fetch('/api/portfolio');
+    const apps = await res.json();
+    const el = document.getElementById('applicationsGrid');
+    if (!apps.length) { el.innerHTML = '<p class="empty-msg">ገና ምንም Application የለም</p>'; return; }
+    el.innerHTML = apps.map(a => `
+        <div class="product-card">
+            <img class="promo-img" src="${a.photo_url || '/static/logo.jpg'}" />
+            <div class="info">
+                <div class="card-name">${a.name}</div>
+                ${a.file_url ? `<a href="${a.file_url}" target="_blank" class="ask-btn" style="display:block; text-decoration:none; box-sizing:border-box;">⬇️ አውርድ</a>` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+// ===== FEEDBACK / TESTIMONIALS / INBOX =====
+async function loadTestimonials() {
+    const res = await fetch('/api/testimonials');
+    const items = await res.json();
+    const el = document.getElementById('testimonialsList');
+    if (!items.length) { el.innerHTML = '<p class="empty-msg">ገና ምንም አስተያየት የለም</p>'; return; }
+    el.innerHTML = items.map(t => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:10px; padding:8px; margin-bottom:6px; border-left:3px solid #b8a84a;">
+            <div style="color:#b8a84a; font-size:11px; font-weight:600;">${t.name} ${t.username ? '(@'+t.username+')' : ''}</div>
+            <div style="color:#c0d8e8; font-size:11px; margin-top:2px;">${t.message}</div>
+        </div>
+    `).join('');
+}
+async function submitTestimonial() {
+    const message = document.getElementById('testimonialInput').value.trim();
+    if (!message) return;
+    await fetch('/api/testimonials/add', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({initData, message})
+    });
+    document.getElementById('testimonialInput').value = '';
+    loadTestimonials();
+    alert('🙏 አመሰግናለሁ! አስተያየትዎ ታይቷል።');
+}
+async function submitPrivateMessage() {
+    const message = document.getElementById('privateMessageInput').value.trim();
+    if (!message) return;
+    await fetch('/api/message/send', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({initData, recipient_type: 'admin', message})
+    });
+    document.getElementById('privateMessageInput').value = '';
+    alert('✅ መልእክትዎ ተልኳል!');
+}
+
+// ===== SHARE =====
+function shareChannel() {
+    const channelUrl = 'https://t.me/MarshalomTech';
+    tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(channelUrl) + '&text=' + encodeURIComponent('Shalom Technology - CCTV and Electronics'));
+}
+document.getElementById('shareWhatsapp') && (document.getElementById('shareWhatsapp').href = 'https://wa.me/?text=' + encodeURIComponent('Check out Shalom Technology: https://t.me/MarshalomTech'));
+document.getElementById('shareFacebook') && (document.getElementById('shareFacebook').href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent('https://t.me/MarshalomTech'));
+document.getElementById('shareTelegram') && (document.getElementById('shareTelegram').href = 'https://t.me/share/url?url=' + encodeURIComponent('https://t.me/MarshalomTech'));
+document.getElementById('shareTwitter') && (document.getElementById('shareTwitter').href = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent('Check out Shalom Technology: https://t.me/MarshalomTech'));
+
+// ===== AI CHAT (in-app, not redirecting to Telegram) =====
+function addChatBubble(text, isUser) {
+    const win = document.getElementById('aiChatWindow');
+    const bubble = document.createElement('div');
+    bubble.style.cssText = `max-width:80%; padding:8px 10px; border-radius:12px; font-size:11px; line-height:1.5; white-space:pre-line; ${isUser ? 'align-self:flex-end; background:#4a9eff; color:#fff;' : 'align-self:flex-start; background:#232e3c; color:#e0edf5;'}`;
+    bubble.textContent = text;
+    win.appendChild(bubble);
+    win.scrollTop = win.scrollHeight;
+}
+async function sendAIMessage() {
+    const input = document.getElementById('aiInput');
+    const message = input.value.trim();
+    if (!message) return;
+    addChatBubble(message, true);
+    input.value = '';
+    addChatBubble('⏳...', false);
+    const win = document.getElementById('aiChatWindow');
+    const res = await fetch('/api/ai_chat', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({initData, message})
+    });
+    const data = await res.json();
+    win.removeChild(win.lastChild);
+    addChatBubble(data.reply || 'Error', false);
+}
+
+// ===== LOGIN (routes to team leader or employee page based on role) =====
+async function doLogin() {
+    const t = translations[currentLang];
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!data.ok) {
+        document.getElementById('loginMsg').textContent = t.wrongLogin;
+        return;
+    }
+    if (data.profile.role === 'team_leader') {
+        teamLeaderCreds = {tl_username: username, tl_password: password};
+        showPage('page-teamleader');
+        renderTeamLeaderPanel(data.profile, username, password);
+    } else {
+        showPage('page-employee');
+        renderEmployeePanel(data.profile, username, password);
+    }
+}
+
+// ===== EMPLOYEE direct login (from Employee menu page) =====
+async function employeeLogin() {
+    const t = translations[currentLang];
+    const username = document.getElementById('empUsername').value;
+    const password = document.getElementById('empPassword').value;
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!data.ok) { document.getElementById('empMsg').textContent = t.wrongLogin; return; }
+    if (data.profile.role === 'team_leader') {
+        alert(currentLang === 'en' ? 'This is a Team Leader account - please use the Team Leader menu.' : 'ይህ የቲም ሊደር አካውንት ነው - እባክዎ የቲም ሊደር ምናሌ ይጠቀሙ።');
+        return;
+    }
+    renderEmployeePanel(data.profile, username, password);
+}
+
+function renderEmployeePanel(profile, username, password) {
+    const t = translations[currentLang];
+    document.getElementById('empLoginBox').style.display = 'none';
+    const el = document.getElementById('empContent');
+    el.style.display = 'block';
+
+    if (profile.must_change_password) {
+        el.innerHTML = `
+            <div style="background:rgba(255,255,255,0.03); border-radius:14px; padding:14px; text-align:center;">
+                <div style="font-size:28px;">🔐</div>
+                <p style="color:#ffb84a; font-size:12px; margin:6px 0;">${t.mustChangePw}</p>
+                <input type="password" id="newPwInput" placeholder="New password" class="input-field">
+                <button class="btn-primary" onclick="changeEmpPassword('${username}','${password}')">${t.setPwBtn}</button>
+                <div id="pwMsg" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+            </div>
+        `;
+        return;
+    }
+
+    el.innerHTML = `
+        <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:14px;">
+            <div style="text-align:center;">${profile.profile_photo ? `<img src="${profile.profile_photo}" style="width:64px; height:64px; border-radius:50%; object-fit:cover;">` : '<span style="font-size:32px;">👤</span>'}</div>
+            <div style="text-align:center; color:#fff; font-weight:700; font-size:14px;">${profile.full_name}</div>
+            <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.internal_email || ''}</div>
+            <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
+                <b>💰 ደመወዝ:</b> ${profile.salary || '-'}<br>
+                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\n/g,'<br>')}<br>
+                <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\n/g,'<br>')}<br>
+                <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\n/g,'<br>')}
+            </div>
+            <div style="margin-top:10px; font-size:9px; color:#8aa3b5;">📷 የመገለጫ ፎቶ ቀይር:</div>
+            <input type="file" id="empPhotoFile" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary" onclick="empSavePhoto('${username}', ${JSON.stringify(password)})">💾 ፎቶ አስቀምጥ</button>
+            <div class="section-title" style="margin-top:10px;">📩 መልእክቶቼ</div>
+            <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
+            <div id="empInboxList"></div>
+        </div>
+    `;
+}
+async function empSavePhoto(username, password) {
+    const fileInput = document.getElementById('empPhotoFile');
+    if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
+    const photo = await fileToBase64(fileInput.files[0]);
+    await fetch(`/api/team/employees/${username}/photo`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({tl_username: username, tl_password: password, photo})
+    });
+    alert('✅ ፎቶ ተቀምጧል!');
+    employeeLoginRetry(username, password);
+}
+async function empLoadInbox(username, password) {
+    const res = await fetch('/api/message/inbox', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({tl_username: username, tl_password: password})
+    });
+    const items = await res.json();
+    document.getElementById('empInboxList').innerHTML = (items || []).map(m => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            <b>${m.sender_name}</b><br>${m.message}<br><span style="color:#8aa3b5;">${m.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም መልእክት የለም</p>';
+}
+
+async function changeEmpPassword(username, oldPassword) {
+    const newPassword = document.getElementById('newPwInput').value;
+    if (!newPassword) return;
+    const res = await fetch('/api/employee/set_password', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, old_password: oldPassword, new_password: newPassword})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('pwMsg').textContent = translations[currentLang].pwChanged;
+        setTimeout(() => employeeLoginRetry(username, newPassword), 1000);
+    }
+}
+async function employeeLoginRetry(username, password) {
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (data.ok) renderEmployeePanel(data.profile, username, password);
+}
+
+// ===== TEAM LEADER =====
+async function teamLeaderLogin() {
+    const t = translations[currentLang];
+    const username = document.getElementById('tlUsername').value;
+    const password = document.getElementById('tlPassword').value;
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (!data.ok || data.profile.role !== 'team_leader') {
+        document.getElementById('tlMsg').textContent = t.wrongLogin;
+        return;
+    }
+    teamLeaderCreds = {tl_username: username, tl_password: password};
+    renderTeamLeaderPanel(data.profile, username, password);
+}
+
+async function renderTeamLeaderPanel(profile) {
+    document.getElementById('tlLoginBox').style.display = 'none';
+    const el = document.getElementById('tlContent');
+    el.style.display = 'block';
+    el.innerHTML = `<p class="empty-msg">⏳...</p>`;
+
+    const res = await fetch('/api/team/employees', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    const employees = await res.json();
+
+    el.innerHTML = `
+        <div style="text-align:center; margin-bottom:10px;">
+            ${profile.profile_photo ? `<img src="${profile.profile_photo}" style="width:60px; height:60px; border-radius:50%; object-fit:cover; margin-bottom:6px;">` : '<div style="font-size:28px;">👔</div>'}
+            <div style="color:#fff; font-weight:700;">${profile.full_name}</div>
+            <div style="color:#8aa3b5; font-size:11px;">🌟 ቲም ሊደር | ${profile.internal_email || ''}</div>
+        </div>
+
+        <div class="section-title">➕ አዲስ ሰራተኛ ጨምር</div>
+        <input type="text" id="tlNewName" placeholder="ሙሉ ስም" class="input-field">
+        <input type="text" id="tlNewPosition" placeholder="ስራ" class="input-field">
+        <button class="btn-primary gold" onclick="tlAddEmployee()">➕ ጨምር</button>
+
+        <div class="section-title" style="margin-top:12px;">👥 ሰራተኞቼ</div>
+        <div id="tlEmployeeList"></div>
+
+        <div class="section-title" style="margin-top:12px;">📩 መልእክቶቼ</div>
+        <button class="btn-primary" onclick="tlLoadInbox()">🔄 መልእክቶች አሳይ</button>
+        <div id="tlInboxList"></div>
+    `;
+    const listEl = document.getElementById('tlEmployeeList');
+    listEl.innerHTML = (employees || []).map(e => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:10px; padding:8px; margin-bottom:6px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+                ${e.profile_photo ? `<img src="${e.profile_photo}" style="width:32px; height:32px; border-radius:50%; object-fit:cover;">` : '<span style="font-size:20px;">👤</span>'}
+                <div><b style="color:#fff; font-size:12px;">${e.full_name}</b><br><span style="color:#8aa3b5; font-size:9px;">${e.position} • ${e.internal_email || ''}</span></div>
+            </div>
+            <div style="display:flex; gap:4px; margin-top:6px; flex-wrap:wrap;">
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlResetPassword('${e.username}')">🔐 Reset</button>
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlAssignTask('${e.username}')">📋 Task</button>
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="tlGiveBonus('${e.username}')">🎁 Bonus</button>
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="tlDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
+            </div>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም ሰራተኛ የለም</p>';
+}
+
+async function tlAddEmployee() {
+    const full_name = document.getElementById('tlNewName').value;
+    const position = document.getElementById('tlNewPosition').value;
+    if (!full_name) { alert('ስም ያስፈልጋል'); return; }
+    const res = await fetch('/api/team/add_employee', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, full_name, position, role: 'employee'})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        alert(`✅ ተጨምሯል!\nUsername: ${data.username}\nPassword: ${data.password}\nEmail: ${data.internal_email}\n\n⚠️ ሰራተኛው መጀመሪያ ቦቱን /start ካደረገ በኋላ ብቻ በራስ-ሰር ማሳወቅ ይቻላል።`);
+        teamLeaderLoginRefresh();
+    }
+}
+async function teamLeaderLoginRefresh() {
+    const res = await fetch('/api/employee/login', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username: teamLeaderCreds.tl_username, password: teamLeaderCreds.tl_password})
+    });
+    const data = await res.json();
+    if (data.ok) renderTeamLeaderPanel(data.profile);
+}
+async function tlDeleteEmployee(username) {
+    if (!confirm('እርግጠኛ ነዎት?')) return;
+    await fetch('/api/team/employees/'+username, {
+        method: 'DELETE', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    teamLeaderLoginRefresh();
+}
+async function tlLoadInbox() {
+    const res = await fetch('/api/message/inbox', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    const items = await res.json();
+    document.getElementById('tlInboxList').innerHTML = (items || []).map(m => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            <b>${m.sender_name}</b> (@${m.sender_username || 'የለም'})<br>${m.message}<br><span style="color:#8aa3b5;">${m.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም መልእክት የለም</p>';
+}
+
+async function tlResetPassword(username) {
+    const res = await fetch('/api/team/reset_password', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, username})
+    });
+    const data = await res.json();
+    if (data.ok) alert('✅ Temp password: ' + data.temp_password);
+}
+async function tlAssignTask(username) {
+    const task = prompt('📋 New task:');
+    if (!task) return;
+    await fetch('/api/team/update', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, username, field: 'tasks', value: task})
+    });
+    alert('✅ Task assigned!');
+}
+async function tlGiveBonus(username) {
+    const bonus = prompt('🎁 Bonus amount:');
+    if (!bonus) return;
+    await fetch('/api/team/update', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, username, field: 'bonus', value: bonus})
+    });
+    alert('✅ Bonus added!');
+}
+
+// ===== ADMIN (auto-detected via Telegram identity, no manual login) =====
+async function loadAdminPage() {
+    const el = document.getElementById('adminContent');
+    const verifyRes = await fetch('/api/admin/verify', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({initData})
+    });
+    const verify = await verifyRes.json();
+    if (!verify.ok) {
+        el.innerHTML = '<p class="empty-msg">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ)</p>';
+        return;
+    }
+    const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes, employeesRes] = await Promise.all([
+        fetch('/api/admin/stats', {headers:{'X-Init-Data': initData}}),
+        fetch('/api/products'),
+        fetch('/api/admin/customers', {headers:{'X-Init-Data': initData}}),
+        fetch('/api/jobs'),
+        fetch('/api/admin/applications', {headers:{'X-Init-Data': initData}}),
+        fetch('/api/config/banks'),
+        fetch('/api/team/employees', {method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})})
+    ]);
+    const stats = await statsRes.json();
+    const products = await productsRes.json();
+    const customers = await customersRes.json();
+    const jobs = await jobsRes.json();
+    const applications = await appsRes.json();
+    const banks = await banksRes.json();
+    const allEmployees = await employeesRes.json();
+
+    el.innerHTML = `
+        <div class="grid2" style="margin-bottom:10px;">
+            <div class="stat-box"><div class="stat-num">${stats.customers}</div><div class="stat-label">👥 ደንበኞች</div></div>
+            <div class="stat-box"><div class="stat-num">${stats.messages}</div><div class="stat-label">💬 መልእክቶች</div></div>
+            <div class="stat-box"><div class="stat-num">${stats.price_inquiries}</div><div class="stat-label">💰 የዋጋ ጥያቄ</div></div>
+            <div class="stat-box"><div class="stat-num">${stats.products}</div><div class="stat-label">🛍️ ምርቶች</div></div>
+        </div>
+        <div class="section-title">🛍️ ምርት ጨምር</div>
+        <input type="text" id="newProdName" placeholder="የምርት ስም" class="input-field">
+        <input type="text" id="newProdCat" placeholder="ምድብ (CCTV/ኤሌክትሮኒክስ)" class="input-field">
+        <textarea id="newProdDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
+        <input type="text" id="newProdLink" placeholder="🔗 የፎቶ ሊንክ (አማራጭ)" class="input-field">
+        <div style="text-align:center; color:#8aa3b5; font-size:10px; margin:4px 0;">-- ወይም --</div>
+        <input type="file" id="newProdFile" accept="image/*" class="input-field" style="padding:6px;">
+        <button class="btn-primary gold" onclick="adminAddProduct()">➕ ምርት ጨምር</button>
+        <div id="adminProdList" style="margin-top:8px;">
+            ${products.map(p => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${p.name} (${p.category})</span>
+                    <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteProduct(${p.id})">🗑️</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="section-title" style="margin-top:14px;">💼 ስራ ጨምር</div>
+        <input type="text" id="newJobTitle" placeholder="የስራ ርዕስ" class="input-field">
+        <input type="text" id="newJobLoc" placeholder="ቦታ" class="input-field">
+        <textarea id="newJobDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
+        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📄 PDF ዝርዝር (አማራጭ):</div>
+        <input type="file" id="newJobPdf" accept="application/pdf" class="input-field" style="padding:6px;">
+        <button class="btn-primary gold" onclick="adminAddJob()">➕ ስራ ጨምር</button>
+        <div id="adminJobList" style="margin-top:8px;">
+            ${jobs.map(j => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${j.title}</span>
+                    <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteJob(${j.id})">🗑️</span>
+                </div>
+            `).join('')}
+        </div>
+        <div class="section-title" style="margin-top:14px;">👥 ደንበኞች (የቅርብ ጊዜ)</div>
+        <div>
+            ${customers.slice(0,10).map(c => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
+                    👤 ${c.name || 'ስም የለም'} (@${c.username || 'የለም'}) - 💬 ${c.message_count}
+                </div>
+            `).join('')}
+        </div>
+
+        <div class="section-title" style="margin-top:14px;">📋 የስራ ማመልከቻዎች</div>
+        <div>
+            ${applications.filter(a => a.status === 'pending').map(a => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
+                    👤 ${a.name} (@${a.username || 'የለም'})<br>
+                    💼 ${a.job_title} | 📞 ${a.phone} | ✉️ ${a.email || '-'}<br>
+                    <div style="display:flex; gap:4px; margin-top:6px;">
+                        <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminApproveApp(${a.id})">✅ አጽድቅ</button>
+                        <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminRejectApp(${a.id})">❌ አትቀበል</button>
+                    </div>
+                </div>
+            `).join('') || '<p class="empty-msg">ምንም አዲስ ማመልከቻ የለም</p>'}
+        </div>
+
+        <div class="section-title" style="margin-top:14px;">🏦 የባንክ ሂሳብ አስተዳደር</div>
+        <textarea id="banksConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(banks && banks.length ? banks : DEFAULT_BANKS, null, 2)}</textarea>
+        <button class="btn-primary gold" onclick="adminSaveBanks()">💾 ባንክ መረጃ አስቀምጥ</button>
+        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📷 QR ኮድ ፎቶ:</div>
+        <input type="file" id="bankQrFile" accept="image/*" class="input-field" style="padding:6px;">
+        <button class="btn-primary gold" onclick="adminSaveBankQr()">💾 QR አስቀምጥ</button>
+
+        <div class="section-title" style="margin-top:14px;">🏠 የመነሻ ገጽ ማስተካከያ</div>
+        <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">ራስጌ ምርጫ:</div>
+        <select id="homeHeaderMode" class="input-field">
+            <option value="text">✨ ጽሁፍ (Shalom Technology + blink)</option>
+            <option value="phone">📞 ስልክ ቁጥር (አኒሜሽን)</option>
+        </select>
+        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 1:</div>
+        <input type="file" id="homeBg1" accept="image/*" class="input-field" style="padding:6px;">
+        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 2 (አማራጭ):</div>
+        <input type="file" id="homeBg2" accept="image/*" class="input-field" style="padding:6px;">
+        <button class="btn-primary gold" onclick="adminSaveHomeSettings()">💾 የመነሻ ገጽ አስቀምጥ</button>
+
+        <div class="section-title" style="margin-top:14px;">📱 Applications አስተዳደር</div>
+        <input type="text" id="newAppName" placeholder="የApp ስም" class="input-field">
+        <input type="file" id="newAppPhoto" accept="image/*" class="input-field" style="padding:6px;">
+        <input type="file" id="newAppFile" class="input-field" style="padding:6px;">
+        <button class="btn-primary gold" onclick="adminAddApplication()">➕ App ጨምር</button>
+        <div id="adminAppList"></div>
+
+        <div class="section-title" style="margin-top:14px;">🌐 ማህበራዊ ሚዲያ አስተካክል</div>
+        <textarea id="socialConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(DEFAULT_SOCIAL, null, 2)}</textarea>
+        <button class="btn-primary gold" onclick="adminSaveSocial()">💾 ማህበራዊ ሚዲያ አስቀምጥ</button>
+
+        <div class="section-title" style="margin-top:14px;">🌟 ምስክርነቶች አስተዳደር</div>
+        <button class="btn-primary" onclick="adminLoadTestimonialsMod()">🔄 አሳይ</button>
+        <div id="adminTestimonialsMod"></div>
+
+        <div class="section-title" style="margin-top:14px;">👥 ሰራተኞች/ቲም ሊደር አስተዳደር</div>
+        <div id="adminEmployeesList">
+            ${(allEmployees || []).map(e => `
+                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+                    <b>${e.full_name}</b> (${e.role === 'team_leader' ? '🌟 ቲም ሊደር' : '👤 ሰራተኛ'})<br>${e.position} • ${e.internal_email || ''}
+                    <div style="display:flex; gap:4px; margin-top:4px;">
+                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="adminResetEmpPassword('${e.username}')">🔐 Reset</button>
+                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
+                    </div>
+                </div>
+            `).join('') || '<p class="empty-msg">ምንም የለም</p>'}
+        </div>
+
+        <div class="section-title" style="margin-top:14px;">📩 የመልእክት ሳጥን (ሁሉም)</div>
+        <button class="btn-primary" onclick="adminLoadInbox()">🔄 መልእክቶች አሳይ</button>
+        <div id="adminInboxList"></div>
+
+        <div class="section-title" style="margin-top:14px;">🔐 አድሚን / ቲም ሊደር ፍጠር</div>
+        <input type="text" id="newCredName" placeholder="ሙሉ ስም" class="input-field">
+        <input type="text" id="newCredPosition" placeholder="ስራ/ደረጃ" class="input-field">
+        <select id="newCredRole" class="input-field">
+            <option value="employee">👤 ሰራተኛ</option>
+            <option value="team_leader">🌟 ቲም ሊደር</option>
+        </select>
+        <button class="btn-primary gold" onclick="adminGenerateCredentials()">🔑 Username/Password ፍጠር</button>
+        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+    `;
+}
+
+async function adminApproveApp(id) {
+    await fetch(`/api/admin/applications/${id}/approve`, {method:'POST', headers:{'X-Init-Data': initData}});
+    loadAdminPage();
+}
+async function adminRejectApp(id) {
+    await fetch(`/api/admin/applications/${id}/reject`, {method:'POST', headers:{'X-Init-Data': initData}});
+    loadAdminPage();
+}
+async function adminSaveBanks() {
+    try {
+        const value = JSON.parse(document.getElementById('banksConfigText').value);
+        await fetch('/api/admin/config/banks', {
+            method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+            body: JSON.stringify({value})
+        });
+        alert('✅ ተቀምጧል!');
+        loadBanks();
+    } catch(e) { alert('❌ JSON ትክክል አይደለም'); }
+}
+async function adminSaveBankQr() {
+    const fileInput = document.getElementById('bankQrFile');
+    if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
+    const base64 = await fileToBase64(fileInput.files[0]);
+    await fetch('/api/admin/config/bank_qr', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({value: base64})
+    });
+    alert('✅ QR ተቀምጧል!');
+    loadBanks();
+}
+async function adminAddApplication() {
+    const name = document.getElementById('newAppName').value;
+    const photoInput = document.getElementById('newAppPhoto');
+    const fileInput = document.getElementById('newAppFile');
+    if (!name) { alert('ስም ያስፈልጋል'); return; }
+    let photo_url = null, file_url = null;
+    if (photoInput.files && photoInput.files[0]) photo_url = await fileToBase64(photoInput.files[0]);
+    if (fileInput.files && fileInput.files[0]) file_url = await fileToBase64(fileInput.files[0]);
+    await fetch('/api/admin/portfolio', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({name, photo_url, file_url})
+    });
+    alert('✅ ተጨምሯል!');
+    loadApplications();
+    loadAdminPage();
+}
+async function adminSaveHomeSettings() {
+    const header_mode = document.getElementById('homeHeaderMode').value;
+    const bg1 = document.getElementById('homeBg1');
+    const bg2 = document.getElementById('homeBg2');
+    const existingRes = await fetch('/api/config/home_settings');
+    const existing = await existingRes.json() || {};
+    const bg_photos = [];
+    if (bg1.files && bg1.files[0]) bg_photos.push(await fileToBase64(bg1.files[0]));
+    if (bg2.files && bg2.files[0]) bg_photos.push(await fileToBase64(bg2.files[0]));
+    const value = {header_mode, bg_photos: bg_photos.length ? bg_photos : (existing.bg_photos || [])};
+    await fetch('/api/admin/config/home_settings', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({value})
+    });
+    alert('✅ ተቀምጧል!');
+    loadHomeSettings();
+}
+async function adminSaveSocial() {
+    try {
+        const value = JSON.parse(document.getElementById('socialConfigText').value);
+        await fetch('/api/admin/config/social', {
+            method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+            body: JSON.stringify({value})
+        });
+        alert('✅ ተቀምጧል!');
+        loadSocial();
+    } catch(e) { alert('❌ JSON ትክክል አይደለም'); }
+}
+async function adminLoadTestimonialsMod() {
+    const res = await fetch('/api/testimonials');
+    const items = await res.json();
+    document.getElementById('adminTestimonialsMod').innerHTML = (items || []).map(t => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span><b>${t.name}</b>: ${t.message}</span>
+            <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteTestimonial(${t.id})">🗑️</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም የለም</p>';
+}
+async function adminDeleteTestimonial(id) {
+    await fetch('/api/testimonials/'+id, {method:'DELETE', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})});
+    adminLoadTestimonialsMod();
+    loadTestimonials();
+}
+async function adminResetEmpPassword(username) {
+    const res = await fetch('/api/team/reset_password', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({username})
+    });
+    const data = await res.json();
+    if (data.ok) alert('✅ Temp password: ' + data.temp_password);
+}
+async function adminDeleteEmployee(username) {
+    if (!confirm('እርግጠኛ ነዎት?')) return;
+    await fetch('/api/team/employees/'+username, {method:'DELETE', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})});
+    loadAdminPage();
+}
+async function adminLoadInbox() {
+    const res = await fetch('/api/message/inbox', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({})
+    });
+    const items = await res.json();
+    document.getElementById('adminInboxList').innerHTML = (items || []).map(m => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            <b>${m.sender_name}</b> (@${m.sender_username || 'የለም'}) → ${m.recipient_type}<br>${m.message}<br><span style="color:#8aa3b5;">${m.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም መልእክት የለም</p>';
+}
+async function adminGenerateCredentials() {
+    const full_name = document.getElementById('newCredName').value;
+    const position = document.getElementById('newCredPosition').value;
+    const role = document.getElementById('newCredRole').value;
+    if (!full_name) { alert('ስም ያስፈልጋል'); return; }
+    const res = await fetch('/api/admin/generate_credentials', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({full_name, position, role})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        document.getElementById('credResult').innerHTML = `✅ Username: <b>${data.username}</b><br>✅ Password: <b>${data.password}</b>`;
+    }
+}
+
+async function adminAddProduct() {
+    const name = document.getElementById('newProdName').value;
+    const category = document.getElementById('newProdCat').value;
+    const description = document.getElementById('newProdDesc').value;
+    const linkUrl = document.getElementById('newProdLink').value;
+    const fileInput = document.getElementById('newProdFile');
+    if (!name || !category) { alert('ስም እና ምድብ ያስፈልጋል'); return; }
+
+    let photo_url = linkUrl;
+    if (fileInput.files && fileInput.files[0]) {
+        photo_url = await fileToBase64(fileInput.files[0]);
+    }
+    await fetch('/api/admin/products', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({name, category, description, photo_url})
+    });
+    loadAdminPage();
+    loadProducts();
+}
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+}
+async function adminDeleteProduct(id) {
+    await fetch('/api/admin/products/'+id, {method:'DELETE', headers:{'X-Init-Data': initData}});
+    loadAdminPage();
+    loadProducts();
+}
+async function adminAddJob() {
+    const title = document.getElementById('newJobTitle').value;
+    const location = document.getElementById('newJobLoc').value;
+    const description = document.getElementById('newJobDesc').value;
+    const pdfInput = document.getElementById('newJobPdf');
+    if (!title) { alert('የስራ ርዕስ ያስፈልጋል'); return; }
+    let pdf_url = null;
+    if (pdfInput.files && pdfInput.files[0]) pdf_url = await fileToBase64(pdfInput.files[0]);
+    await fetch('/api/admin/jobs', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({title, location, description, pdf_url})
+    });
+    loadAdminPage();
+    loadJobs();
+}
+async function adminDeleteJob(id) {
+    await fetch('/api/admin/jobs/'+id, {method:'DELETE', headers:{'X-Init-Data': initData}});
+    loadAdminPage();
+    loadJobs();
+}
 
 // ===== INIT =====
 loadProducts();
@@ -1718,7 +2758,6 @@ if (window.location.hash) {
 </script>
 </body>
 </html>
-"""
 
 """
 
@@ -1782,16 +2821,16 @@ def api_ask_price():
     })
     return jsonify({"ok": True})
 
-AI_BUSY_MESSAGE = """ ማርሻሎም (Marshalom) ረዳት
-ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 
-አሁን ላይ እጅግ በጣም ብዙ ጥያቄዎችን በማስተናገድ ላይ ስለሆንን፣ ትክክለኛ ምላሽ ለእርስዎ ለመስጠት የ Shalom Technology ፍቃድ በመጠበቅ ላይ እገኛለሁ። 
-አትጨነቁ! መልእክትዎ በአስተማማኝ ሁኔታ ተይዟል። 
- ጉዳይዎ አስቸኳይ ከሆነ፣ ይህን ቅጽ በመከተል ይላኩልን፦
+AI_BUSY_MESSAGE = """🌟 ማርሻሎም (Marshalom) የቴክኖሎጂ ረዳት 🌟
+ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 🙏
+አሁን ላይ እጅግ በጣም ብዙ ጥያቄዎችን በማስተናገድ ላይ ስለሆንን፣ ትክክለኛ ምላሽ ለእርስዎ ለመስጠት የ Shalom Technology ፍቃድ በመጠበቅ ላይ እገኛለሁ። ⏳
+አትጨነቁ! መልእክትዎ በአስተማማኝ ሁኔታ ተይዟል። 🤝✨
+⚠️ ጉዳይዎ አስቸኳይ ከሆነ፣ ይህን ቅጽ በመከተል ይላኩልን፦
 
 አስቸኳይ ብለው ይጻፉ።
 የችግሩን ወይም የጥያቄዎን ዝርዝር በአጭሩ ይግለጹ።
-(ምሳሌ፦ አስቸኳይ፣ ካሜራዬ አይሰራም ወይም ሌላ... ) 
-ማሳሰቢያ፦ ይህንን የእርሶን ጉዳይ በመረዳት በቀጥታ ወደ ማርሻሎም የግል (SMS) እልካለው። ደርሶት፣ በአጭር ጊዜ ውስጥ እራሱ ይደውልልዎታል! """
+(ምሳሌ፦ አስቸኳይ፣ ካሜራዬ አይሰራም ወይም ሌላ... ) 🚨
+ማሳሰቢያ፦ ይህንን የእርሶን ጉዳይ በመረዳት በቀጥታ ወደ ማርሻሎም የግል (SMS) እልካለው። ደርሶት፣ በአጭር ጊዜ ውስጥ እራሱ ይደውልልዎታል! 📱"""
 
 @app.route('/api/ai_chat', methods=['POST'])
 def api_ai_chat():
@@ -2111,11 +3150,7 @@ async function init() {
   });
   const verify = await verifyRes.json();
   if (!verify.ok) {
-    document.getElementById('app').innerHTML = '<p class="denied">🚫ስህተት፡ አልተጋበዝክም! ማርሻሎም ወይም ልዋም አይደለህም 
-    አስተዳዳሪም አይደለህም። እና በተሳሳተ መንገድ የመጣህ እንግዳ ነህ።
-    ሲስተሙ እየሳቀብህ ነው፤ ግን ለሞከርከው ሙከራ እናመሰግናለን!Error: You are not invited! You are not Marshalom or Lwam, and you are not an admin either.
-    So you are just a guest who arrived by mistake.
-    The system is laughing at you; but thank you for the attempt! </p>';
+    document.getElementById('app').innerHTML = '<p class="denied">🚫 ተደራሽነት የለዎትም</p>';
     return;
   }
   render();

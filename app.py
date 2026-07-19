@@ -981,7 +981,7 @@ def get_inbox(recipient_type=None, recipient_username=None, limit=50):
     if recipient_type == 'admin':
         cur.execute("SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at FROM internal_messages ORDER BY id DESC LIMIT %s", (limit,))
     else:
-        cur.execute("""
+        cur.execute("""))
             SELECT sender_name, sender_username, sender_user_id, recipient_type, recipient_username, message, created_at
             FROM internal_messages WHERE recipient_username=%s ORDER BY id DESC LIMIT %s
         """, (recipient_username, limit))

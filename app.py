@@ -2205,24 +2205,24 @@ function renderEmployeePanel(profile, username, password) {
     }
 
     el.innerHTML = `
-        <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:14px;">
-            <div style="text-align:center;">${profile.profile_photo ? `<img src="${profile.profile_photo}" style="width:64px; height:64px; border-radius:50%; object-fit:cover;">` : '<span style="font-size:32px;">👤</span>'}</div>
-            <div style="text-align:center; color:#fff; font-weight:700; font-size:14px;">${profile.full_name}</div>
-            <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.internal_email || ''}</div>
-            <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
-                <b>💰 ደመወዝ:</b> ${profile.salary || '-'}<br>
-                <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\n/g, '<br>')}<br>
-                <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\n/g, '<br>')}<br>
-                <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\n/g, '<br>')}
-            </div>
-            <div style="margin-top:10px; font-size:9px; color:#8aa3b5;">📷 የመገለጫ ፎቶ ቀይር:</div>
-            <input type="file" id="empPhotoFile" accept="image/*" class="input-field" style="padding:6px;">
-            <button class="btn-primary" onclick="empSavePhoto('${username}', ${JSON.stringify(password)})">💾 ፎቶ አስቀምጥ</button>
-            <div class="section-title" style="margin-top:10px;">📩 መልእክቶቼ</div>
-            <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
-            <div id="empInboxList"></div>
+    <div style="background:rgba(255,255,255,0.04); border-radius:14px; padding:14px;">
+        <div style="text-align:center;">${profile.profile_photo ? `<img src="${profile.profile_photo}">` : ''}</div>
+        <div style="text-align:center; color:#fff; font-weight:700; font-size:14px;">${profile.name}</div>
+        <div style="text-align:center; color:#8aa3b5; font-size:11px; margin-bottom:8px;">${profile.position} - ${profile.department}</div>
+        <div style="font-size:11px; color:#c0d8e8; line-height:1.8;">
+            <b>💰 ደሞዝ:</b> ${profile.salary || '-'}<br>
+            <b>🎁 ቦነስ:</b><br>${(profile.bonus || 'የለም').replace(/\n/g, '<br>')}<br>
+            <b>⚠️ ማስጠንቀቂያ:</b><br>${(profile.warnings || 'የለም').replace(/\n/g, '<br>')}<br>
+            <b>📋 ስራዎች:</b><br>${(profile.tasks || 'የለም').replace(/\n/g, '<br>')}
         </div>
-    `;
+    </div>
+    <div style="margin-top:10px; font-size:9px; color:#8aa3b5;">📷 የመገለጫ ፎቶ ቀይር:</div>
+    <input type="file" id="empPhotoFile" accept="image/*" class="input-field" style="padding:6px;">
+    <button class="btn-primary" onclick="empSavePhoto('${username}', ${JSON.stringify(password)})">💾 ፎቶ አስቀምጥ</button>
+    <div class="section-title" style="margin-top:10px;">📩 መልዕክቶች</div>
+    <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">ገቢ መልዕክቶች</button>
+    <div id="empInboxList"></div>
+`;
 }
 async function empSavePhoto(username, password) {
     const fileInput = document.getElementById('empPhotoFile');

@@ -152,6 +152,7 @@ def init_db():
                 email TEXT,
                 id_number TEXT,
                 selfie_photo TEXT,
+                education_doc TEXT,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT NOW()
             )
@@ -159,6 +160,7 @@ def init_db():
         cur.execute("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS email TEXT")
         cur.execute("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS id_number TEXT")
         cur.execute("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS selfie_photo TEXT")
+        cur.execute("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS education_doc TEXT")
         cur.execute("ALTER TABLE job_applications ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS site_config (
@@ -306,6 +308,37 @@ def load_promos():
     except Exception as e:
         print(f"DB load error: {e}")
         return []
+
+def list_promos_with_ids():
+    if not DATABASE_URL:
+        return []
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, COALESCE(text_am, text) FROM promos ORDER BY id")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        return [{"id": r[0], "text": r[1]} for r in rows]
+    except Exception as e:
+        print(f"DB list_promos error: {e}")
+        return []
+
+def delete_promo(promo_id):
+    if not DATABASE_URL:
+        return False
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM promos WHERE id=%s", (promo_id,))
+        deleted = cur.rowcount > 0
+        conn.commit()
+        cur.close()
+        conn.close()
+        return deleted
+    except Exception as e:
+        print(f"DB delete_promo error: {e}")
+        return False
 
 def add_promo(raw_text):
     """Stores a promo, auto-enhanced and translated into 4 languages via DeepSeek."""
@@ -467,14 +500,14 @@ def delete_job(job_id):
     cur.close()
     conn.close()
 
-def add_job_application(job_id, job_title, user_id, name, username, phone, email='', id_number='', selfie_photo=None):
+def add_job_application(job_id, job_title, user_id, name, username, phone, email='', id_number='', selfie_photo=None, education_doc=None):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
         """INSERT INTO job_applications
-           (job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo, status)
-           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending') RETURNING id""",
-        (job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo)
+           (job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo, education_doc, status)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'pending') RETURNING id""",
+        (job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo, education_doc)
     )
     new_id = cur.fetchone()[0]
     conn.commit()
@@ -1204,17 +1237,7 @@ SYSTEM_PROMPT = """አንተ "Marshalom AI" ነህ — የ Shalom Technology ረ
 ማህበራዊ ሚዲያ: 0931556590, www.marshalom.com, YouTube, TikTok"""
 
 WELCOME_MESSAGE = """✨ እንኳን ደህና መጡ ወደ SHALOM TECHNOLOGY! ✨
-
-🎥📷🔒 እኛ በኤሌክትሮኒክስ እና በደህንነት ካሜራዎች ላይ ጥራት ያለው አገልግሎት የምንሰጥ ታማኝ የቴክኖሎጂ አጋርዎ ነን። ✅
-
-🚀 ለምን እኛን ይመርጣሉ?
-🔹 ዘመናዊ የደህንነት ካሜራዎች (CCTV) 📷🎥
-🔹 ጥራት ያላቸው ኤሌክትሮኒክስ እቃዎች 📺🔌
-🔹 ፈጣን እና አስተማማኝ አገልግሎት ⚡️✅
-
-📢 ቻናላችንን ይቀላቀሉ: https://t.me/MarshalomTech
-🌐 ድር ጣቢያ: www.marshalom.com
-📞 ስልክ: 0931556590"""
+📷 የደህንነት ካሜራ እና ኤሌክትሮኒክስ አገልግሎት"""
 
 BUSY_MESSAGE = """🌟 ማርሻሎም (Marshalom) የቴክኖሎጂ ረዳት 🌟
 ሰላም! መልእክትዎን ስላደረሱን እናመሰግናለን። 🙏
@@ -1648,6 +1671,12 @@ CATALOG_HTML = """
             <div style="text-align:center;">
                 <div style="font-size:32px;">🛡️</div>
                 <p style="color:#c0d8e8; font-size:13px; font-weight:600;" id="supportSub">24/7 ደንበኛ ድጋፍ</p>
+                <div id="branchSelectorBox" style="display:none; margin-bottom:10px; text-align:left;">
+                    <div style="font-size:10px; color:#8aa3b5; margin-bottom:4px;">📍 የእርስዎ ቦታ/ቅርንጫፍ ይምረጡ፡</div>
+                    <select id="branchSelector" class="input-field" onchange="selectMyBranch()">
+                        <option value="">-- ይምረጡ --</option>
+                    </select>
+                </div>
                 <div class="grid3" style="margin-top:6px;">
                     <a href="tel:0931556590" class="card-box" style="text-decoration:none; color:inherit;">
                         <span style="font-size:28px; display:block;">📞</span>
@@ -1724,7 +1753,7 @@ CATALOG_HTML = """
         <!-- ADMIN -->
         <div class="page" id="page-admin">
             <div class="page-title"><button class="back-btn" onclick="showPage('page-home')">‹</button>⚙️ <span id="adminTitle">አድሚን</span></div>
-            <div id="adminContent"><p class="empty-msg">⏳ በማረጋገጥ ላይ...</p></div>
+            <div id="adminContent"><p class="empty-msg">⏳ የአይቲ ሹክሹክታ... / IT Whispers...<br><br>💻 ሰርቨሮቻችን እርስ በእርስ እየተከራከሩ ነው፦ "የ አለቃችን ማርሻሎም ስልክ ነው!" ይላል አንዱ ሰርቨር። "አይደለም፣ የእውነተኛዋ ንግሥት የልዋም ስልክ ነው!" ይላል ሁለተኛው።<br>🤖 ሳተላይቶቻችን የናንተ መሆኑን አረጋግጠው እስኪከፍቱ ድረስ ጥቂት ሰከንዶች ታገሱ...</p></div>
         </div>
 
         <!-- TEAM LEADER -->
@@ -1753,7 +1782,7 @@ CATALOG_HTML = """
 
     </div>
 
-    <button id="bigBackBtn" onclick="showPage('page-home')" style="display:none; position:fixed; bottom:78px; left:50%; transform:translateX(-50%); max-width:380px; width:calc(100% - 28px); background:#4a9eff; color:#fff; font-size:14px; font-weight:700; padding:12px; border:none; border-radius:14px; box-shadow:0 6px 20px rgba(74,158,255,0.4); z-index:50;">🏠⬅️ ተመለስ / BACK</button>
+    <button id="bigBackBtn" onclick="showPage('page-home')" style="display:none; position:fixed; top:10px; right:10px; width:50px; height:34px; background:#4a9eff; color:#fff; font-size:10px; font-weight:700; padding:0; border:none; border-radius:10px; box-shadow:0 4px 12px rgba(74,158,255,0.45); z-index:200;">🏠⬅️</button>
 
     <div class="bottom-nav-wrap">
         <div class="bottom-nav" id="bottomNavTicker">
@@ -2011,6 +2040,8 @@ function renderJobs() {
             <input type="text" id="idnum-${j.id}" placeholder="የመታወቂያ ቁጥር (ID Number)" class="input-field">
             <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">📸 ሰልፊ ፎቶ (አማራጭ)</div>
             <input type="file" id="selfie-${j.id}" accept="image/*" class="input-field" style="padding:6px;">
+            <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🎓 የትምህርት ማስረጃ (አማራጭ)</div>
+            <input type="file" id="education-${j.id}" accept="image/*,application/pdf" class="input-field" style="padding:6px;">
             <button class="btn-primary" onclick="applyJob(${j.id}, ${JSON.stringify(j.title)})">${t.applyBtn}</button>
         </div>
     `).join('');
@@ -2025,9 +2056,14 @@ async function applyJob(jobId, jobTitle) {
     if (selfieInput.files && selfieInput.files[0]) {
         selfie_photo = await fileToBase64(selfieInput.files[0]);
     }
+    const eduInput = document.getElementById('education-' + jobId);
+    let education_doc = null;
+    if (eduInput.files && eduInput.files[0]) {
+        education_doc = await fileToBase64(eduInput.files[0]);
+    }
     await fetch('/api/jobs/apply', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({initData, job_id: jobId, job_title: jobTitle, phone, email, id_number, selfie_photo})
+        body: JSON.stringify({initData, job_id: jobId, job_title: jobTitle, phone, email, id_number, selfie_photo, education_doc})
     });
     alert(t.applySent);
 }
@@ -2630,7 +2666,7 @@ async function loadAdminPage() {
     });
     const verify = await verifyRes.json();
     if (!verify.ok) {
-        el.innerHTML = '<p class="empty-msg">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ)</p>';
+        el.innerHTML = '<p class="empty-msg">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ) / Access Denied (Owner Only)<br><br>💻 ሰርቨሮቻችን ምርመራቸውን አጠናቀዋል፦ "ይህማ የአለቃችን የማርሻሎም ስልክ አይደለም! የንግሥት ልዋምም አይደለም!" በማለት በሩን ዘግተውታል።</p>';
         return;
     }
     const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes, employeesRes, branchesRes, callsRes, tasksRes, analyticsRes] = await Promise.all([
@@ -2841,6 +2877,7 @@ function renderAdminSectionContent(key) {
                     <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
                         <b>${e.full_name}</b> (${e.role === 'team_leader' ? '🌟 ቲም ሊደር' : '👤 ሰራተኛ'})<br>${e.position} • ${e.internal_email || ''}
                         <div style="display:flex; gap:4px; margin-top:4px;">
+                            <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminCallEmployee('${e.username}')">📞 ደውል</button>
                             <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="adminResetEmpPassword('${e.username}')">🔐 Reset</button>
                             <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
                         </div>
@@ -2912,6 +2949,18 @@ function renderAdminSectionContent(key) {
         `;
     }
     return '<p class="empty-msg">የለም</p>';
+}
+async function adminCallEmployee(username) {
+    const res = await fetch('/api/admin/call_employee', {
+        method: 'POST', headers: {'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({username})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        alert('✅ የጥሪ ሊንክ ተልኳል! የእርስዎ ሊንክ፡\\n' + data.call_link);
+    } else {
+        alert('❌ ' + (data.error || 'ስህተት ተፈጥሯል'));
+    }
 }
 async function adminAddBranch() {
     const name = document.getElementById('newBranchName').value.trim();
@@ -3123,6 +3172,26 @@ async function adminDeleteJob(id) {
     loadJobs();
 }
 
+async function loadBranchSelector() {
+    try {
+        const res = await fetch('/api/admin/branches');
+        const branches = await res.json();
+        const box = document.getElementById('branchSelectorBox');
+        const sel = document.getElementById('branchSelector');
+        if (branches && branches.length) {
+            sel.innerHTML = '<option value="">-- ይምረጡ --</option>' + branches.map(b => `<option value="${b.name}">🏢 ${b.name}</option>`).join('');
+            box.style.display = 'block';
+        }
+    } catch (e) { /* no branches configured yet, keep hidden */ }
+}
+async function selectMyBranch() {
+    const branch = document.getElementById('branchSelector').value;
+    if (!branch) return;
+    await fetch('/api/customer/set_branch', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({initData, branch})
+    });
+}
 // ===== INIT =====
 loadProducts();
 loadJobs();
@@ -3132,6 +3201,7 @@ loadApplications();
 loadTestimonials();
 loadSocial();
 loadHomeSettings();
+loadBranchSelector();
 setInterval(maybeRotateProducts, 60000);
 if (window.location.hash) {
     const targetPage = window.location.hash.replace('#', '');
@@ -3170,14 +3240,17 @@ def api_jobs_apply():
     email = body.get('email', '')
     id_number = body.get('id_number', '')
     selfie_photo = body.get('selfie_photo')  # optional, base64
+    education_doc = body.get('education_doc')  # optional, base64 image or PDF
     name = user.get('first_name', '') if user else body.get('name', 'ስም የለም')
     username = user.get('username', '') if user else ''
     user_id = user.get('id') if user else None
-    app_id = add_job_application(job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo)
+    app_id = add_job_application(job_id, job_title, user_id, name, username, phone, email, id_number, selfie_photo, education_doc)
 
     caption = f"💼 አዲስ የስራ ማመልከቻ! (ID: {app_id})\nስራ: {job_title}\nስም: {name} (@{username or 'የለም'})\nስልክ: {phone}\nኢሜይል: {email or 'የለም'}\nመታወቂያ ቁ.: {id_number or 'የለም'}\nመታወቂያ: tg://user?id={user_id}"
     if selfie_photo:
         caption += "\n📸 ሰልፊ ተያይዟል (አድሚን dashboard ውስጥ ይታያል)"
+    if education_doc:
+        caption += "\n🎓 የትምህርት ማስረጃ ተያይዟል (አድሚን dashboard ውስጥ ይታያል)"
     requests.post(f"{TELEGRAM_URL}/sendMessage", json={'chat_id': HR_CHANNEL_ID, 'text': caption})
     requests.post(f"{TELEGRAM_URL}/sendMessage", json={'chat_id': OWNER_CHAT_ID, 'text': caption})
     return jsonify({"ok": True})
@@ -3483,6 +3556,19 @@ def api_team_tasks_decide():
 def api_admin_branches_list():
     return jsonify(get_branches())
 
+@app.route('/api/customer/set_branch', methods=['POST'])
+def api_customer_set_branch():
+    """Lets a customer pick their own location/branch from the Support page (no login needed)."""
+    body = request.get_json(silent=True) or {}
+    user = verify_telegram_webapp_data(body.get('initData', ''))
+    if not user:
+        return jsonify({"ok": False, "error": "invalid initData"}), 401
+    branch = (body.get('branch') or '').strip()
+    if not branch:
+        return jsonify({"ok": False, "error": "branch required"}), 400
+    set_customer_branch(user['id'], branch)
+    return jsonify({"ok": True})
+
 @app.route('/api/admin/branches', methods=['POST'])
 def api_admin_branches_add():
     if not require_admin():
@@ -3528,6 +3614,26 @@ def api_admin_calls_decide():
         else:
             requests.post(f"{TELEGRAM_URL}/sendMessage", json={'chat_id': requester_chat_id, 'text': "❌ የጥሪ ጥያቄዎ ውድቅ ተደርጓል።"})
     return jsonify({"ok": bool(row)})
+
+@app.route('/api/admin/call_employee', methods=['POST'])
+def api_admin_call_employee():
+    """Admin/super admin directly starts a call with any employee - no request/approval needed."""
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    username = (body.get('username') or '').strip()
+    emp = get_employee_by_username(username)
+    if not emp:
+        return jsonify({"ok": False, "error": "employee not found"}), 404
+    if not emp.get('telegram_chat_id'):
+        return jsonify({"ok": False, "error": "employee has not linked their Telegram yet (ask them to /login once)"}), 400
+    room_name = f"Marshalom{emp['telegram_chat_id']}{int(time.time())}"
+    call_link = f"https://meet.jit.si/{room_name}"
+    requests.post(f"{TELEGRAM_URL}/sendMessage", json={
+        'chat_id': emp['telegram_chat_id'],
+        'text': f"📞 አድሚን ጥሪ እየጠየቀዎት ነው! ይህን ሊንክ ይክፈቱ፡\n{call_link}"
+    })
+    return jsonify({"ok": True, "call_link": call_link})
 
 @app.route('/api/team/employees', methods=['POST'])
 def api_team_employees():
@@ -4436,6 +4542,29 @@ def index():
                 requests.post(url, json={'chat_id': chat_id, 'text': f"📦 አጠቃላይ ማስታወቂያዎች: {count}"})
                 return "OK"
 
+            # /listpromos - list all promos with their IDs (so a bad/test one can be deleted)
+            if text == '/listpromos':
+                items = list_promos_with_ids()
+                if items:
+                    listing = "\n\n".join([f"#{p['id']}: {p['text'][:120]}" for p in items])
+                    listing += "\n\nለማጥፋት፡ /deletepromo <id>"
+                else:
+                    listing = "ምንም ማስታወቂያ የለም።"
+                requests.post(url, json={'chat_id': chat_id, 'text': f"📦 ማስታወቂያዎች:\n\n{listing}"})
+                return "OK"
+
+            # /deletepromo <id> - remove a specific promo (e.g. leftover test/bad text)
+            if text.startswith('/deletepromo '):
+                try:
+                    promo_id = int(text[len('/deletepromo '):].strip())
+                    if delete_promo(promo_id):
+                        requests.post(url, json={'chat_id': chat_id, 'text': f"✅ ማስታወቂያ #{promo_id} ጠፍቷል።"})
+                    else:
+                        requests.post(url, json={'chat_id': chat_id, 'text': "❌ ID አልተገኘም።"})
+                except ValueError:
+                    requests.post(url, json={'chat_id': chat_id, 'text': "❌ ይህን ይጠቀሙ፡ /deletepromo 3"})
+                return "OK"
+
             # /postnow - manually trigger a promo post immediately (for testing)
             if text == '/postnow':
                 post_random_promo()
@@ -4482,28 +4611,13 @@ def index():
                 notify_super_admins(f"💰 የዋጋ ጥያቄ ደረሰ!\n\n{info}")
                 return "OK"
 
-            # Normal /start - main button + quick-access shortcuts straight into the Mini App
+            # Normal /start - ONE minimal message, ONE big full-width button. Nothing else.
             send_with_webapp_button(
                 chat_id,
-                WELCOME_MESSAGE + "\n\n👇 ሙሉ ካታሎግ እና አገልግሎት ለማየት ከታች ያለውን ቁልፍ ይጫኑ 👇",
+                "✨ Shalom Technology",
                 "🚀 መተግበሪያውን ክፈት / OPEN APP",
-                '/webapp',
-                extra_rows=[
-                    [
-                        {'text': '🛍️ ምርቶች', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-products"}},
-                        {'text': '💼 ስራ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-jobs"}}
-                    ],
-                    [
-                        {'text': '📞 ደውሉ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-contact"}},
-                        {'text': '⚙️ ተጨማሪ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp"}}
-                    ]
-                ]
+                '/webapp'
             )
-            requests.post(url, json={
-                'chat_id': chat_id,
-                'text': '📢 ቻናላችንን ይቀላቀሉ',
-                'reply_markup': {'inline_keyboard': [[{'text': '📢 ቻናላችንን ይቀላቀሉ', 'url': 'https://t.me/MarshalomTech'}]]}
-            })
             notify_super_admins(f"{info}\n\n🤖 *AI መልስ:*\n{WELCOME_MESSAGE}", parse_mode='Markdown')
             return "OK"
 

@@ -34,23 +34,28 @@ TECHNICAL_PASSWORD = os.environ.get("TECHNICAL_PASSWORD")  # የተወሰነ ቴ
 
 TELEGRAM_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-def send_with_webapp_button(chat_id, text, button_text, webapp_path):
-    """Sends a message with a web_app inline button. Logs the real Telegram error
-    if it fails, and falls back to a plain url button so the user still gets something."""
+def send_with_webapp_button(chat_id, text, button_text, webapp_path, extra_rows=None):
+    """Sends a message with a web_app inline button, optionally with extra quick-access
+    button rows underneath. Logs the real Telegram error if it fails, and falls back to
+    a plain url button so the user still gets something."""
     webapp_url = f"{BASE_URL.rstrip('/')}{webapp_path}"
+    keyboard = [[{'text': button_text, 'web_app': {'url': webapp_url}}]]
+    if extra_rows:
+        keyboard.extend(extra_rows)
     result = requests.post(f"{TELEGRAM_URL}/sendMessage", json={
         'chat_id': chat_id,
         'text': text,
-        'reply_markup': {'inline_keyboard': [[{'text': button_text, 'web_app': {'url': webapp_url}}]]}
+        'reply_markup': {'inline_keyboard': keyboard}
     })
     resp_json = result.json() if result.ok or result.content else {}
     if not resp_json.get('ok'):
         print(f"⚠️ web_app button send failed: {resp_json.get('description')} (BASE_URL={BASE_URL}, url={webapp_url})")
         # Fallback: plain URL button (opens in external browser instead of embedded Mini App)
+        fallback_keyboard = [[{'text': button_text, 'url': webapp_url}]]
         requests.post(f"{TELEGRAM_URL}/sendMessage", json={
             'chat_id': chat_id,
             'text': text,
-            'reply_markup': {'inline_keyboard': [[{'text': button_text, 'url': webapp_url}]]}
+            'reply_markup': {'inline_keyboard': fallback_keyboard}
         })
     return resp_json
 ETHIOPIA_TZ = pytz.timezone("Africa/Addis_Ababa")
@@ -524,6 +529,34 @@ def set_config(key, value):
     conn.commit()
     cur.close()
     conn.close()
+
+def get_analytics():
+    """Daily customers (last 7 days) + top-requested products (last 30 days). 100% free, no external service."""
+    if not DATABASE_URL:
+        return {"daily_customers": [], "top_products": []}
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT TO_CHAR(first_seen, 'YYYY-MM-DD') AS d, COUNT(*)
+            FROM customers
+            WHERE first_seen >= NOW() - INTERVAL '7 days'
+            GROUP BY d ORDER BY d
+        """)
+        daily_customers = [{"date": r[0], "count": r[1]} for r in cur.fetchall()]
+        cur.execute("""
+            SELECT COALESCE(product_name, 'ያልታወቀ'), COUNT(*)
+            FROM price_inquiries
+            WHERE created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY product_name ORDER BY COUNT(*) DESC LIMIT 8
+        """)
+        top_products = [{"name": r[0], "count": r[1]} for r in cur.fetchall()]
+        cur.close()
+        conn.close()
+        return {"daily_customers": daily_customers, "top_products": top_products}
+    except Exception as e:
+        print(f"get_analytics error: {e}")
+        return {"daily_customers": [], "top_products": []}
 
 def get_stats():
     if not DATABASE_URL:
@@ -2293,8 +2326,70 @@ function renderEmployeePanel(profile, username, password) {
             <div class="section-title" style="margin-top:10px;">📩 መልእክቶቼ</div>
             <button class="btn-primary" onclick="empLoadInbox('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
             <div id="empInboxList"></div>
+
+            <div class="section-title" style="margin-top:10px;">🔔 ማስታወቂያዎቼ</div>
+            <button class="btn-primary" onclick="empLoadNotifications('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
+            <div id="empNotificationsList"></div>
+
+            <div class="section-title" style="margin-top:10px;">✅ የመግቢያ ማረጋገጫ</div>
+            <button class="btn-primary gold" onclick="empCheckin('${username}', ${JSON.stringify(password)})">✅ ዛሬ ደረስኩ</button>
+            <div id="empCheckinMsg" style="font-size:11px; margin-top:4px; color:#4aff8a;"></div>
+
+            <div class="section-title" style="margin-top:10px;">📋 አዲስ ስራ ጠይቅ</div>
+            <input type="text" id="empTaskTitle" placeholder="የስራ ርዕስ" class="input-field">
+            <textarea id="empTaskDesc" placeholder="ዝርዝር (አማራጭ)" class="input-field" rows="2"></textarea>
+            <button class="btn-primary gold" onclick="empRequestTask('${username}', ${JSON.stringify(password)})">📤 ላክ</button>
+            <div class="section-title" style="margin-top:8px;">📋 የስራ ጥያቄዎቼ</div>
+            <button class="btn-primary" onclick="empLoadMyTasks('${username}', ${JSON.stringify(password)})">🔄 አሳይ</button>
+            <div id="empMyTasksList"></div>
         </div>
     `;
+}
+async function empLoadNotifications(username, password) {
+    const res = await fetch('/api/employee/notifications', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    document.getElementById('empNotificationsList').innerHTML = (data.notifications || []).map(n => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+            🔔 ${n.message}<br><span style="color:#8aa3b5;">${n.created_at}</span>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም ማስታወቂያ የለም</p>';
+}
+async function empCheckin(username, password) {
+    const res = await fetch('/api/employee/checkin', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    document.getElementById('empCheckinMsg').textContent = data.checked_in_now ? '✅ መገኘትዎ ተመዝግቧል!' : 'ℹ️ ዛሬ አስቀድመው check-in አድርገዋል።';
+}
+async function empRequestTask(username, password) {
+    const title = document.getElementById('empTaskTitle').value.trim();
+    const description = document.getElementById('empTaskDesc').value.trim();
+    if (!title) { alert('የስራ ርዕስ ያስፈልጋል'); return; }
+    await fetch('/api/employee/request_task', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, password, title, description})
+    });
+    document.getElementById('empTaskTitle').value = '';
+    document.getElementById('empTaskDesc').value = '';
+    alert('✅ ስራ ጥያቄዎ ተልኳል፣ ማጽደቅ በመጠበቅ ላይ።');
+    empLoadMyTasks(username, password);
+}
+async function empLoadMyTasks(username, password) {
+    const res = await fetch('/api/employee/tasks', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    const iconMap = {pending:'⏳', approved:'✅', rejected:'❌'};
+    document.getElementById('empMyTasksList').innerHTML = (data.tasks || []).map(t => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
+            ${iconMap[t.status] || '•'} ${t.title} (${t.status})
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም የስራ ጥያቄ የለም</p>';
 }
 async function empSavePhoto(username, password) {
     const fileInput = document.getElementById('empPhotoFile');
@@ -2390,6 +2485,10 @@ async function renderTeamLeaderPanel(profile) {
         <div class="section-title" style="margin-top:12px;">📩 መልእክቶቼ</div>
         <button class="btn-primary" onclick="tlLoadInbox()">🔄 መልእክቶች አሳይ</button>
         <div id="tlInboxList"></div>
+
+        <div class="section-title" style="margin-top:12px;">📋 የስራ ማጽደቂያ ወረፋ</div>
+        <button class="btn-primary" onclick="tlLoadTaskQueue()">🔄 አሳይ</button>
+        <div id="tlTaskQueueList"></div>
     `;
     const listEl = document.getElementById('tlEmployeeList');
     listEl.innerHTML = (employees || []).map(e => `
@@ -2408,6 +2507,29 @@ async function renderTeamLeaderPanel(profile) {
     `).join('') || '<p class="empty-msg">ምንም ሰራተኛ የለም</p>';
 }
 
+async function tlLoadTaskQueue() {
+    const res = await fetch('/api/team/tasks/pending', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(teamLeaderCreds)
+    });
+    const pending = await res.json();
+    document.getElementById('tlTaskQueueList').innerHTML = (pending || []).map(t => `
+        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
+            👤 <b>${t.employee_name}</b><br>📌 ${t.title}<br>📝 ${t.description || '—'}
+            <div style="display:flex; gap:4px; margin-top:6px;">
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="tlDecideTask(${t.id}, true)">✅ አጽድቅ</button>
+                <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="tlDecideTask(${t.id}, false)">❌ አትቀበል</button>
+            </div>
+        </div>
+    `).join('') || '<p class="empty-msg">ምንም ያልታየ ስራ ጥያቄ የለም</p>';
+}
+async function tlDecideTask(id, approve) {
+    await fetch('/api/team/tasks/decide', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({...teamLeaderCreds, id, approve})
+    });
+    tlLoadTaskQueue();
+}
 async function tlAddEmployee() {
     const full_name = document.getElementById('tlNewName').value;
     const position = document.getElementById('tlNewPosition').value;
@@ -2479,6 +2601,27 @@ async function tlGiveBonus(username) {
 }
 
 // ===== ADMIN (auto-detected via Telegram identity, no manual login) =====
+let adminData = {};
+let currentAdminSection = null;
+const ADMIN_SECTIONS = [
+    {key:'analytics', icon:'📊', label:'ትንተና'},
+    {key:'products', icon:'🛍️', label:'ምርቶች'},
+    {key:'jobs', icon:'💼', label:'ስራዎች'},
+    {key:'customers', icon:'👥', label:'ደንበኞች'},
+    {key:'applications', icon:'📋', label:'ማመልከቻዎች'},
+    {key:'banks', icon:'🏦', label:'ባንክ'},
+    {key:'home', icon:'🏠', label:'መነሻ ገጽ'},
+    {key:'apps', icon:'📱', label:'Applications'},
+    {key:'social', icon:'🌐', label:'ማህበራዊ ሚዲያ'},
+    {key:'testimonials', icon:'🌟', label:'ምስክርነቶች'},
+    {key:'employees', icon:'👔', label:'ሰራተኞች'},
+    {key:'inbox', icon:'📩', label:'መልእክት ሳጥን'},
+    {key:'credentials', icon:'🔐', label:'Credentials'},
+    {key:'branches', icon:'🏢', label:'ቅርንጫፎች'},
+    {key:'calls', icon:'📞', label:'ጥሪ ጥያቄዎች'},
+    {key:'tasks', icon:'📝', label:'ስራ ማጽደቂያ'}
+];
+
 async function loadAdminPage() {
     const el = document.getElementById('adminContent');
     const verifyRes = await fetch('/api/admin/verify', {
@@ -2490,162 +2633,312 @@ async function loadAdminPage() {
         el.innerHTML = '<p class="empty-msg">🚫 ተደራሽነት የለዎትም (የባለቤት አካውንት ብቻ)</p>';
         return;
     }
-    const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes, employeesRes] = await Promise.all([
+    const [statsRes, productsRes, customersRes, jobsRes, appsRes, banksRes, employeesRes, branchesRes, callsRes, tasksRes, analyticsRes] = await Promise.all([
         fetch('/api/admin/stats', {headers:{'X-Init-Data': initData}}),
         fetch('/api/products'),
         fetch('/api/admin/customers', {headers:{'X-Init-Data': initData}}),
         fetch('/api/jobs'),
         fetch('/api/admin/applications', {headers:{'X-Init-Data': initData}}),
         fetch('/api/config/banks'),
-        fetch('/api/team/employees', {method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})})
+        fetch('/api/team/employees', {method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})}),
+        fetch('/api/admin/branches'),
+        fetch('/api/admin/calls/pending', {headers:{'X-Init-Data': initData}}),
+        fetch('/api/team/tasks/pending', {method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData}, body: JSON.stringify({})}),
+        fetch('/api/admin/analytics', {headers:{'X-Init-Data': initData}})
     ]);
-    const stats = await statsRes.json();
-    const products = await productsRes.json();
-    const customers = await customersRes.json();
-    const jobs = await jobsRes.json();
-    const applications = await appsRes.json();
-    const banks = await banksRes.json();
-    const allEmployees = await employeesRes.json();
+    adminData = {
+        stats: await statsRes.json(),
+        products: await productsRes.json(),
+        customers: await customersRes.json(),
+        jobs: await jobsRes.json(),
+        applications: await appsRes.json(),
+        banks: await banksRes.json(),
+        allEmployees: await employeesRes.json(),
+        branches: await branchesRes.json(),
+        pendingCalls: await callsRes.json(),
+        pendingTasks: await tasksRes.json(),
+        analytics: await analyticsRes.json()
+    };
+    renderAdminView();
+}
 
+function adminShowSection(key) {
+    currentAdminSection = key;
+    renderAdminView();
+}
+
+function renderAdminView() {
+    const el = document.getElementById('adminContent');
+    if (!currentAdminSection) {
+        const s = adminData.stats || {};
+        el.innerHTML = `
+            <div class="grid2" style="margin-bottom:14px;">
+                <div class="stat-box"><div class="stat-num">${s.customers||0}</div><div class="stat-label">👥 ደንበኞች</div></div>
+                <div class="stat-box"><div class="stat-num">${s.messages||0}</div><div class="stat-label">💬 መልእክቶች</div></div>
+                <div class="stat-box"><div class="stat-num">${s.price_inquiries||0}</div><div class="stat-label">💰 የዋጋ ጥያቄ</div></div>
+                <div class="stat-box"><div class="stat-num">${s.products||0}</div><div class="stat-label">🛍️ ምርቶች</div></div>
+            </div>
+            <div class="grid2">
+                ${ADMIN_SECTIONS.map(sec => `
+                    <div class="menu-btn" onclick="adminShowSection('${sec.key}')"><span class="icon">${sec.icon}</span><span>${sec.label}</span></div>
+                `).join('')}
+            </div>
+        `;
+        return;
+    }
+    const meta = ADMIN_SECTIONS.find(s => s.key === currentAdminSection) || {icon:'⚙️', label:''};
     el.innerHTML = `
-        <div class="grid2" style="margin-bottom:10px;">
-            <div class="stat-box"><div class="stat-num">${stats.customers}</div><div class="stat-label">👥 ደንበኞች</div></div>
-            <div class="stat-box"><div class="stat-num">${stats.messages}</div><div class="stat-label">💬 መልእክቶች</div></div>
-            <div class="stat-box"><div class="stat-num">${stats.price_inquiries}</div><div class="stat-label">💰 የዋጋ ጥያቄ</div></div>
-            <div class="stat-box"><div class="stat-num">${stats.products}</div><div class="stat-label">🛍️ ምርቶች</div></div>
-        </div>
-        <div class="section-title">🛍️ ምርት ጨምር</div>
-        <input type="text" id="newProdName" placeholder="የምርት ስም" class="input-field">
-        <input type="text" id="newProdCat" placeholder="ምድብ (CCTV/ኤሌክትሮኒክስ)" class="input-field">
-        <textarea id="newProdDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
-        <input type="text" id="newProdLink" placeholder="🔗 የፎቶ ሊንክ (አማራጭ)" class="input-field">
-        <div style="text-align:center; color:#8aa3b5; font-size:10px; margin:4px 0;">-- ወይም --</div>
-        <input type="file" id="newProdFile" accept="image/*" class="input-field" style="padding:6px;">
-        <button class="btn-primary gold" onclick="adminAddProduct()">➕ ምርት ጨምር</button>
-        <div id="adminProdList" style="margin-top:8px;">
-            ${products.map(p => `
-                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>${p.name} (${p.category})</span>
-                    <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteProduct(${p.id})">🗑️</span>
-                </div>
-            `).join('')}
-        </div>
-        <div class="section-title" style="margin-top:14px;">💼 ስራ ጨምር</div>
-        <input type="text" id="newJobTitle" placeholder="የስራ ርዕስ" class="input-field">
-        <input type="text" id="newJobLoc" placeholder="ቦታ" class="input-field">
-        <textarea id="newJobDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
-        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📄 PDF ዝርዝር (አማራጭ):</div>
-        <input type="file" id="newJobPdf" accept="application/pdf" class="input-field" style="padding:6px;">
-        <button class="btn-primary gold" onclick="adminAddJob()">➕ ስራ ጨምር</button>
-        <div id="adminJobList" style="margin-top:8px;">
-            ${jobs.map(j => `
-                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
-                    <span>${j.title}</span>
-                    <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteJob(${j.id})">🗑️</span>
-                </div>
-            `).join('')}
-        </div>
-        <div class="section-title" style="margin-top:14px;">👥 ደንበኞች (የቅርብ ጊዜ)</div>
-        <div>
-            ${customers.slice(0,10).map(c => `
-                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
-                    👤 ${c.name || 'ስም የለም'} (@${c.username || 'የለም'}) - 💬 ${c.message_count}
-                </div>
-            `).join('')}
-        </div>
-
-        <div class="section-title" style="margin-top:14px;">📋 የስራ ማመልከቻዎች</div>
-        <div>
-            ${applications.filter(a => a.status === 'pending').map(a => `
-                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
-                    👤 ${a.name} (@${a.username || 'የለም'})<br>
-                    💼 ${a.job_title} | 📞 ${a.phone} | ✉️ ${a.email || '-'}<br>
-                    <div style="display:flex; gap:4px; margin-top:6px;">
-                        <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminApproveApp(${a.id})">✅ አጽድቅ</button>
-                        <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminRejectApp(${a.id})">❌ አትቀበል</button>
-                    </div>
-                </div>
-            `).join('') || '<p class="empty-msg">ምንም አዲስ ማመልከቻ የለም</p>'}
-        </div>
-
-        <div class="section-title" style="margin-top:14px;">🏦 የባንክ ሂሳብ አስተዳደር</div>
-        <textarea id="banksConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(banks && banks.length ? banks : DEFAULT_BANKS, null, 2)}</textarea>
-        <button class="btn-primary gold" onclick="adminSaveBanks()">💾 ባንክ መረጃ አስቀምጥ</button>
-        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📷 QR ኮድ ፎቶ:</div>
-        <input type="file" id="bankQrFile" accept="image/*" class="input-field" style="padding:6px;">
-        <button class="btn-primary gold" onclick="adminSaveBankQr()">💾 QR አስቀምጥ</button>
-<div class="section-title" style="margin-top:14px;">🏢 ቅርንጫፍ (Branch) አስተዳደር</div>
-        <input type="text" id="newBranchName" placeholder="ለምሳሌ፡ Kenya-Nairobi" class="input-field">
-        <button class="btn-primary gold" onclick="adminAddBranch()">➕ ቅርንጫፍ ጨምር</button>
-        <div id="adminBranchList" style="margin-bottom:10px;"><p class="empty-msg">⏳...</p></div>
-
-        <div style="font-size:10px; color:#8aa3b5; margin:6px 0 2px;">👤 ደንበኛን ወደ ቅርንጫፍ መድብ፡</div>
-        <input type="text" id="assignUserId" placeholder="የደንበኛ User ID (ቁጥር)" class="input-field">
-        <input type="text" id="assignBranchName" placeholder="የቅርንጫፍ ስም (ልክ እንደ ተጻፈው)" class="input-field">
-        <button class="btn-primary" onclick="adminAssignBranch()">✅ መድብ</button>
-        <div id="branchCustomersList" style="margin-top:8px;"></div>
-        <div class="section-title" style="margin-top:14px;">🏠 የመነሻ ገጽ ማስተካከያ</div>
-        <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">ራስጌ ምርጫ:</div>
-        <select id="homeHeaderMode" class="input-field">
-            <option value="text">✨ ጽሁፍ (Shalom Technology + blink)</option>
-            <option value="phone">📞 ስልክ ቁጥር (አኒሜሽን)</option>
-        </select>
-        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 1:</div>
-        <input type="file" id="homeBg1" accept="image/*" class="input-field" style="padding:6px;">
-        <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 2 (አማራጭ):</div>
-        <input type="file" id="homeBg2" accept="image/*" class="input-field" style="padding:6px;">
-        <button class="btn-primary gold" onclick="adminSaveHomeSettings()">💾 የመነሻ ገጽ አስቀምጥ</button>
-
-        <div class="section-title" style="margin-top:14px;">📱 Applications አስተዳደር</div>
-        <input type="text" id="newAppName" placeholder="የApp ስም" class="input-field">
-        <input type="file" id="newAppPhoto" accept="image/*" class="input-field" style="padding:6px;">
-        <input type="file" id="newAppFile" class="input-field" style="padding:6px;">
-        <button class="btn-primary gold" onclick="adminAddApplication()">➕ App ጨምር</button>
-        <div id="adminAppList"></div>
-
-        <div class="section-title" style="margin-top:14px;">🌐 ማህበራዊ ሚዲያ አስተካክል</div>
-        <textarea id="socialConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(DEFAULT_SOCIAL, null, 2)}</textarea>
-        <button class="btn-primary gold" onclick="adminSaveSocial()">💾 ማህበራዊ ሚዲያ አስቀምጥ</button>
-
-        <div class="section-title" style="margin-top:14px;">🌟 ምስክርነቶች አስተዳደር</div>
-        <button class="btn-primary" onclick="adminLoadTestimonialsMod()">🔄 አሳይ</button>
-        <div id="adminTestimonialsMod"></div>
-
-        <div class="section-title" style="margin-top:14px;">👥 ሰራተኞች/ቲም ሊደር አስተዳደር</div>
-        <div id="adminEmployeesList">
-            ${(allEmployees || []).map(e => `
-                <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
-                    <b>${e.full_name}</b> (${e.role === 'team_leader' ? '🌟 ቲም ሊደር' : '👤 ሰራተኛ'})<br>${e.position} • ${e.internal_email || ''}
-                    <div style="display:flex; gap:4px; margin-top:4px;">
-                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="adminResetEmpPassword('${e.username}')">🔐 Reset</button>
-                        <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
-                    </div>
-                </div>
-            `).join('') || '<p class="empty-msg">ምንም የለም</p>'}
-        </div>
-
-        <div class="section-title" style="margin-top:14px;">📩 የመልእክት ሳጥን (ሁሉም)</div>
-        <button class="btn-primary" onclick="adminLoadInbox()">🔄 መልእክቶች አሳይ</button>
-        <div id="adminInboxList"></div>
-
-        <div class="section-title" style="margin-top:14px;">🔐 አድሚን / ቲም ሊደር ፍጠር</div>
-        <input type="text" id="newCredName" placeholder="ሙሉ ስም" class="input-field">
-        <input type="text" id="newCredPosition" placeholder="ስራ/ደረጃ" class="input-field">
-        <select id="newCredRole" class="input-field">
-            <option value="employee">👤 ሰራተኛ</option>
-            <option value="team_leader">🌟 ቲም ሊደር</option>
-        </select>
-        <button class="btn-primary gold" onclick="adminGenerateCredentials()">🔑 Username/Password ፍጠር</button>
-        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+        <button class="btn-primary" style="margin-bottom:10px;" onclick="adminShowSection(null)">‹ ተመለስ ወደ ምናሌ</button>
+        <div class="section-title">${meta.icon} ${meta.label}</div>
+        ${renderAdminSectionContent(currentAdminSection)}
     `;
-    loadBranchesAdmin();
 }
-        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
-    `;
-    loadBranchesAdmin();
+
+function renderAdminSectionContent(key) {
+    const d = adminData;
+    if (key === 'analytics') {
+        const dc = (d.analytics && d.analytics.daily_customers) || [];
+        const maxC = Math.max(1, ...dc.map(x => x.count));
+        const tp = (d.analytics && d.analytics.top_products) || [];
+        const maxP = Math.max(1, ...tp.map(x => x.count));
+        return `
+            <div style="font-size:10px; color:#8aa3b5; margin-bottom:4px;">👥 ደንበኞች በቀን (የመጨረሻ 7 ቀናት)</div>
+            <div style="margin-bottom:10px;">
+                ${dc.map(x => `
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:3px; font-size:9px;">
+                        <span style="width:62px; color:#8aa3b5;">${x.date.slice(5)}</span>
+                        <div style="flex:1; background:rgba(255,255,255,0.05); border-radius:4px; overflow:hidden;">
+                            <div style="width:${(x.count/maxC*100).toFixed(0)}%; background:linear-gradient(90deg,#2b7bff,#4aff8a); padding:3px 0; text-align:right; padding-right:4px; color:#fff;">${x.count}</div>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ገና ውሂብ የለም</p>'}
+            </div>
+            <div style="font-size:10px; color:#8aa3b5; margin-bottom:4px;">🛍️ በጣም የተጠየቁ ምርቶች (የመጨረሻ 30 ቀናት)</div>
+            <div>
+                ${tp.map(x => `
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:3px; font-size:9px;">
+                        <span style="width:90px; color:#8aa3b5; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${x.name}</span>
+                        <div style="flex:1; background:rgba(255,255,255,0.05); border-radius:4px; overflow:hidden;">
+                            <div style="width:${(x.count/maxP*100).toFixed(0)}%; background:linear-gradient(90deg,#c9962c,#ffd76a); padding:3px 0; text-align:right; padding-right:4px; color:#1a1a1a;">${x.count}</div>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ገና ውሂብ የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'products') {
+        return `
+            <input type="text" id="newProdName" placeholder="የምርት ስም" class="input-field">
+            <input type="text" id="newProdCat" placeholder="ምድብ (CCTV/ኤሌክትሮኒክስ)" class="input-field">
+            <textarea id="newProdDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
+            <input type="text" id="newProdLink" placeholder="🔗 የፎቶ ሊንክ (አማራጭ)" class="input-field">
+            <div style="text-align:center; color:#8aa3b5; font-size:10px; margin:4px 0;">-- ወይም --</div>
+            <input type="file" id="newProdFile" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary gold" onclick="adminAddProduct()">➕ ምርት ጨምር</button>
+            <div id="adminProdList" style="margin-top:8px;">
+                ${d.products.map(p => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>${p.name} (${p.category})</span>
+                        <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteProduct(${p.id})">🗑️</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    if (key === 'jobs') {
+        return `
+            <input type="text" id="newJobTitle" placeholder="የስራ ርዕስ" class="input-field">
+            <input type="text" id="newJobLoc" placeholder="ቦታ" class="input-field">
+            <textarea id="newJobDesc" placeholder="መግለጫ" class="input-field" rows="2"></textarea>
+            <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📄 PDF ዝርዝር (አማራጭ):</div>
+            <input type="file" id="newJobPdf" accept="application/pdf" class="input-field" style="padding:6px;">
+            <button class="btn-primary gold" onclick="adminAddJob()">➕ ስራ ጨምር</button>
+            <div id="adminJobList" style="margin-top:8px;">
+                ${d.jobs.map(j => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>${j.title}</span>
+                        <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteJob(${j.id})">🗑️</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    if (key === 'customers') {
+        return `
+            <div>
+                ${d.customers.slice(0,30).map(c => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
+                        👤 ${c.name || 'ስም የለም'} (@${c.username || 'የለም'}) - 💬 ${c.message_count}${c.branch ? ' - 🏢 '+c.branch : ''}
+                    </div>
+                `).join('') || '<p class="empty-msg">ምንም ደንበኛ የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'applications') {
+        return `
+            <div>
+                ${d.applications.filter(a => a.status === 'pending').map(a => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
+                        👤 ${a.name} (@${a.username || 'የለም'})<br>
+                        💼 ${a.job_title} | 📞 ${a.phone} | ✉️ ${a.email || '-'}<br>
+                        <div style="display:flex; gap:4px; margin-top:6px;">
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminApproveApp(${a.id})">✅ አጽድቅ</button>
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminRejectApp(${a.id})">❌ አትቀበል</button>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ምንም አዲስ ማመልከቻ የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'banks') {
+        return `
+            <textarea id="banksConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(d.banks && d.banks.length ? d.banks : DEFAULT_BANKS, null, 2)}</textarea>
+            <button class="btn-primary gold" onclick="adminSaveBanks()">💾 ባንክ መረጃ አስቀምጥ</button>
+            <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">📷 QR ኮድ ፎቶ:</div>
+            <input type="file" id="bankQrFile" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary gold" onclick="adminSaveBankQr()">💾 QR አስቀምጥ</button>
+        `;
+    }
+    if (key === 'home') {
+        return `
+            <div style="font-size:9px; color:#8aa3b5; margin-bottom:4px;">ራስጌ ምርጫ:</div>
+            <select id="homeHeaderMode" class="input-field">
+                <option value="text">✨ ጽሁፍ (Shalom Technology + blink)</option>
+                <option value="phone">📞 ስልክ ቁጥር (አኒሜሽን)</option>
+            </select>
+            <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 1:</div>
+            <input type="file" id="homeBg1" accept="image/*" class="input-field" style="padding:6px;">
+            <div style="font-size:9px; color:#8aa3b5; margin:4px 0;">🖼️ ጀርባ ፎቶ 2 (አማራጭ):</div>
+            <input type="file" id="homeBg2" accept="image/*" class="input-field" style="padding:6px;">
+            <button class="btn-primary gold" onclick="adminSaveHomeSettings()">💾 የመነሻ ገጽ አስቀምጥ</button>
+        `;
+    }
+    if (key === 'apps') {
+        return `
+            <input type="text" id="newAppName" placeholder="የApp ስም" class="input-field">
+            <input type="file" id="newAppPhoto" accept="image/*" class="input-field" style="padding:6px;">
+            <input type="file" id="newAppFile" class="input-field" style="padding:6px;">
+            <button class="btn-primary gold" onclick="adminAddApplication()">➕ App ጨምር</button>
+            <div id="adminAppList"></div>
+        `;
+    }
+    if (key === 'social') {
+        return `
+            <textarea id="socialConfigText" class="input-field" rows="6" style="font-size:10px;">${JSON.stringify(DEFAULT_SOCIAL, null, 2)}</textarea>
+            <button class="btn-primary gold" onclick="adminSaveSocial()">💾 ማህበራዊ ሚዲያ አስቀምጥ</button>
+        `;
+    }
+    if (key === 'testimonials') {
+        return `
+            <button class="btn-primary" onclick="adminLoadTestimonialsMod()">🔄 አሳይ</button>
+            <div id="adminTestimonialsMod"></div>
+        `;
+    }
+    if (key === 'employees') {
+        return `
+            <div id="adminEmployeesList">
+                ${(d.allEmployees || []).map(e => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:4px; font-size:10px;">
+                        <b>${e.full_name}</b> (${e.role === 'team_leader' ? '🌟 ቲም ሊደር' : '👤 ሰራተኛ'})<br>${e.position} • ${e.internal_email || ''}
+                        <div style="display:flex; gap:4px; margin-top:4px;">
+                            <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#2b3a4a; color:#fff;" onclick="adminResetEmpPassword('${e.username}')">🔐 Reset</button>
+                            <button style="flex:1; font-size:9px; padding:4px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDeleteEmployee('${e.username}')">🗑️ ሰርዝ</button>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ምንም የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'inbox') {
+        return `
+            <button class="btn-primary" onclick="adminLoadInbox()">🔄 መልእክቶች አሳይ</button>
+            <div id="adminInboxList"></div>
+        `;
+    }
+    if (key === 'credentials') {
+        return `
+            <input type="text" id="newCredName" placeholder="ሙሉ ስም" class="input-field">
+            <input type="text" id="newCredPosition" placeholder="ስራ/ደረጃ" class="input-field">
+            <select id="newCredRole" class="input-field">
+                <option value="employee">👤 ሰራተኛ</option>
+                <option value="team_leader">🌟 ቲም ሊደር</option>
+            </select>
+            <button class="btn-primary gold" onclick="adminGenerateCredentials()">🔑 Username/Password ፍጠር</button>
+            <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
+        `;
+    }
+    if (key === 'branches') {
+        return `
+            <input type="text" id="newBranchName" placeholder="ለምሳሌ: Kenya-Nairobi" class="input-field">
+            <button class="btn-primary gold" onclick="adminAddBranch()">➕ ቅርንጫፍ ጨምር</button>
+            <div id="adminBranchList" style="margin-top:8px;">
+                ${(d.branches || []).map(b => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>🏢 ${b.name}</span>
+                        <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteBranch('${b.name}')">🗑️</span>
+                    </div>
+                `).join('') || '<p class="empty-msg">ገና ምንም ቅርንጫፍ የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'calls') {
+        return `
+            <div id="adminCallsList">
+                ${(d.pendingCalls || []).map(c => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
+                        👤 ${c.requester_name} — ${c.target_role === 'admin' ? 'አድሚን' : 'ቲም ሊደር'} ጠይቋል
+                        <div style="display:flex; gap:4px; margin-top:6px;">
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminDecideCall(${c.id}, true)">✅ አጽድቅ (Jitsi ይላካል)</button>
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDecideCall(${c.id}, false)">❌ አትቀበል</button>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ምንም የጥሪ ጥያቄ የለም</p>'}
+            </div>
+        `;
+    }
+    if (key === 'tasks') {
+        return `
+            <div id="adminTasksList">
+                ${(d.pendingTasks || []).map(t => `
+                    <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:8px; margin-bottom:6px; font-size:10px;">
+                        👤 <b>${t.employee_name}</b><br>📌 ${t.title}<br>📝 ${t.description || '—'}
+                        <div style="display:flex; gap:4px; margin-top:6px;">
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#2a5a3a; color:#fff;" onclick="adminDecideTask(${t.id}, true)">✅ አጽድቅ</button>
+                            <button style="flex:1; font-size:9px; padding:5px; border:none; border-radius:6px; background:#5a2a2a; color:#fff;" onclick="adminDecideTask(${t.id}, false)">❌ አትቀበል</button>
+                        </div>
+                    </div>
+                `).join('') || '<p class="empty-msg">ምንም ያልታየ ስራ ጥያቄ የለም</p>'}
+            </div>
+        `;
+    }
+    return '<p class="empty-msg">የለም</p>';
 }
-        <div id="credResult" style="font-size:11px; margin-top:6px; color:#4aff8a;"></div>
-    `;
+async function adminAddBranch() {
+    const name = document.getElementById('newBranchName').value.trim();
+    if (!name) return;
+    await fetch('/api/admin/branches', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({name})
+    });
+    loadAdminPage();
+}
+async function adminDeleteBranch(name) {
+    await fetch(`/api/admin/branches/${encodeURIComponent(name)}`, {method:'DELETE', headers:{'X-Init-Data': initData}});
+    loadAdminPage();
+}
+async function adminDecideCall(id, approve) {
+    await fetch('/api/admin/calls/decide', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({id, approve})
+    });
+    loadAdminPage();
+}
+async function adminDecideTask(id, approve) {
+    await fetch('/api/team/tasks/decide', {
+        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
+        body: JSON.stringify({id, approve})
+    });
+    loadAdminPage();
 }
 
 async function adminApproveApp(id) {
@@ -2667,58 +2960,7 @@ async function adminSaveBanks() {
         loadBanks();
     } catch(e) { alert('❌ JSON ትክክል አይደለም'); }
 }
-async function loadBranchesAdmin() {
-    const res = await fetch('/api/admin/branches', {headers:{'X-Init-Data': initData}});
-    const branches = await res.json();
-    document.getElementById('adminBranchList').innerHTML = (branches || []).map(b => `
-        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:11px; display:flex; justify-content:space-between; align-items:center;">
-            <span onclick="viewBranchCustomers('${b.name}')" style="cursor:pointer; color:#4a9eff;">🏢 ${b.name}</span>
-            <span style="color:#ff6b6b; cursor:pointer;" onclick="adminDeleteBranch('${b.name}')">🗑️</span>
-        </div>
-    `).join('') || '<p class="empty-msg">ምንም ቅርንጫፍ የለም</p>';
-}
-async function adminAddBranch() {
-    const name = document.getElementById('newBranchName').value.trim();
-    if (!name) { alert('ስም ያስፈልጋል'); return; }
-    const res = await fetch('/api/admin/branches', {
-        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
-        body: JSON.stringify({name})
-    });
-    const data = await res.json();
-    document.getElementById('newBranchName').value = '';
-    if (data.ok) loadBranchesAdmin();
-    else alert('❌ ስህተት ወይም ቅርንጫፍ አስቀድሞ አለ');
-}
-async function adminDeleteBranch(name) {
-    if (!confirm('እርግጠኛ ነዎት?')) return;
-    await fetch('/api/admin/branches/'+encodeURIComponent(name), {method:'DELETE', headers:{'X-Init-Data': initData}});
-    loadBranchesAdmin();
-}
-async function adminAssignBranch() {
-    const user_id = document.getElementById('assignUserId').value.trim();
-    const branch_name = document.getElementById('assignBranchName').value.trim();
-    if (!user_id || !branch_name) { alert('ID እና ቅርንጫፍ ስም ያስፈልጋል'); return; }
-    const res = await fetch('/api/admin/branches/assign', {
-        method:'POST', headers:{'Content-Type':'application/json','X-Init-Data': initData},
-        body: JSON.stringify({user_id, branch_name})
-    });
-    const data = await res.json();
-    alert(data.ok ? '✅ ደንበኛ ተመድቧል!' : '❌ ደንበኛ አልተገኘም (መጀመሪያ ቦቱን ማናገር አለበት)');
-}
-async function viewBranchCustomers(name) {
-    const res = await fetch('/api/admin/branches/'+encodeURIComponent(name)+'/customers', {headers:{'X-Init-Data': initData}});
-    const custs = await res.json();
-    document.getElementById('branchCustomersList').innerHTML = `<div class="section-title">👥 ${name} ደንበኞች</div>` + ((custs || []).map(c => `
-        <div style="background:rgba(255,255,255,0.03); border-radius:8px; padding:6px 8px; margin-bottom:4px; font-size:10px;">
-            👤 ${c.name || 'ስም የለም'} (@${c.username || 'የለም'}) — 🆔 ${c.user_id}
-        </div>
-    `).join('') || '<p class="empty-msg">ምንም ደንበኛ የለም</p>');
-}
 async function adminSaveBankQr() {
-    const fileInput = document.getElementById('bankQrFile');
-    if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
-    const fileInput = document.getElementById('bankQrFile');
-}
     const fileInput = document.getElementById('bankQrFile');
     if (!fileInput.files || !fileInput.files[0]) { alert('ፎቶ ይምረጡ'); return; }
     const base64 = await fileToBase64(fileInput.files[0]);
@@ -3176,6 +3418,117 @@ def api_employee_set_password():
     set_employee_password(body.get('username').strip(), new_password, must_change=False)
     return jsonify({"ok": True})
 
+# ===== NEW: Employee self-service endpoints (Mini App: notifications, check-in, tasks) =====
+@app.route('/api/employee/notifications', methods=['POST'])
+def api_employee_notifications():
+    body = request.get_json(silent=True) or {}
+    emp = get_employee_by_credentials(body.get('username', '').strip(), body.get('password', '').strip())
+    if not emp:
+        return jsonify({"ok": False, "error": "invalid credentials"}), 401
+    items = get_notifications(emp['id'])
+    mark_notifications_read(emp['id'])
+    return jsonify({"ok": True, "notifications": items})
+
+@app.route('/api/employee/checkin', methods=['POST'])
+def api_employee_checkin():
+    body = request.get_json(silent=True) or {}
+    emp = get_employee_by_credentials(body.get('username', '').strip(), body.get('password', '').strip())
+    if not emp:
+        return jsonify({"ok": False, "error": "invalid credentials"}), 401
+    is_new = checkin_attendance(emp['id'])
+    return jsonify({"ok": True, "checked_in_now": is_new})
+
+@app.route('/api/employee/tasks', methods=['POST'])
+def api_employee_tasks():
+    body = request.get_json(silent=True) or {}
+    emp = get_employee_by_credentials(body.get('username', '').strip(), body.get('password', '').strip())
+    if not emp:
+        return jsonify({"ok": False, "error": "invalid credentials"}), 401
+    return jsonify({"ok": True, "tasks": get_my_task_requests(emp['id'])})
+
+@app.route('/api/employee/request_task', methods=['POST'])
+def api_employee_request_task():
+    body = request.get_json(silent=True) or {}
+    emp = get_employee_by_credentials(body.get('username', '').strip(), body.get('password', '').strip())
+    if not emp:
+        return jsonify({"ok": False, "error": "invalid credentials"}), 401
+    title = (body.get('title') or '').strip()
+    if not title:
+        return jsonify({"ok": False, "error": "title required"}), 400
+    req_id = create_task_request(emp['id'], title, (body.get('description') or '').strip())
+    notify_super_admins(f"📋 {emp['full_name']} አዲስ ስራ ጠይቋል፡ {title}\nለማጽደቅ በ Admin ገጽ ወይም /approvetask {req_id}")
+    return jsonify({"ok": True, "id": req_id})
+
+# ===== NEW: Team Leader / Admin task-approval queue (Mini App) =====
+@app.route('/api/team/tasks/pending', methods=['POST'])
+def api_team_tasks_pending():
+    body = request.get_json(silent=True) or {}
+    if not is_authorized_manager(body):
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_pending_task_requests())
+
+@app.route('/api/team/tasks/decide', methods=['POST'])
+def api_team_tasks_decide():
+    body = request.get_json(silent=True) or {}
+    if not is_authorized_manager(body):
+        return jsonify({"error": "forbidden"}), 403
+    req_id = body.get('id')
+    approve = bool(body.get('approve'))
+    decided_by = body.get('tl_username') or 'admin'
+    row = decide_task_request(req_id, approve, decided_by)
+    return jsonify({"ok": bool(row)})
+
+# ===== NEW: Branches (admin manages freely, like products) =====
+@app.route('/api/admin/branches', methods=['GET'])
+def api_admin_branches_list():
+    return jsonify(get_branches())
+
+@app.route('/api/admin/branches', methods=['POST'])
+def api_admin_branches_add():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    name = (body.get('name') or '').strip()
+    if not name:
+        return jsonify({"ok": False, "error": "name required"}), 400
+    ok = add_branch(name)
+    return jsonify({"ok": ok})
+
+@app.route('/api/admin/branches/<branch_name>', methods=['DELETE'])
+def api_admin_branches_delete(branch_name):
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    ok = delete_branch(branch_name)
+    return jsonify({"ok": ok})
+
+@app.route('/api/admin/branches/<branch_name>/customers', methods=['GET'])
+def api_admin_branch_customers(branch_name):
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_customers_by_branch(branch_name))
+
+# ===== NEW: Call requests queue (admin approves/rejects Jitsi Meet calls) =====
+@app.route('/api/admin/calls/pending', methods=['GET'])
+def api_admin_calls_pending():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_pending_call_requests())
+
+@app.route('/api/admin/calls/decide', methods=['POST'])
+def api_admin_calls_decide():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    body = request.get_json(silent=True) or {}
+    row = decide_call_request(body.get('id'), bool(body.get('approve')))
+    if row:
+        requester_chat_id, room_name = row
+        if body.get('approve'):
+            call_link = f"https://meet.jit.si/{room_name}"
+            requests.post(f"{TELEGRAM_URL}/sendMessage", json={'chat_id': requester_chat_id, 'text': f"✅ ጥሪዎ ጸድቋል! ይህን ሊንክ ይክፈቱ፡\n{call_link}"})
+        else:
+            requests.post(f"{TELEGRAM_URL}/sendMessage", json={'chat_id': requester_chat_id, 'text': "❌ የጥሪ ጥያቄዎ ውድቅ ተደርጓል።"})
+    return jsonify({"ok": bool(row)})
+
 @app.route('/api/team/employees', methods=['POST'])
 def api_team_employees():
     body = request.get_json(silent=True) or {}
@@ -3339,9 +3692,6 @@ async function loadProducts() {
   el.innerHTML = `
     <input id="p-name" placeholder="የምርት ስም" />
     <input id="p-cat" placeholder="ምድብ (ለምሳሌ CCTV)" />
-    <input id="p-name" placeholder="የምርት ስም" />
-    <input id="p-name" placeholder="የምርት ስም" />
-    <input id="p-cat" placeholder="ምድብ (ለምሳሌ CCTV)" />
     <textarea id="p-desc" placeholder="መግለጫ"></textarea>
     <input id="p-photo" placeholder="የፎቶ ሊንክ (URL)" />
     <button class="primary" onclick="addProduct()">➕ ምርት ጨምር</button>
@@ -3389,50 +3739,7 @@ init();
 </body>
 </html>
 """
-@app.route('/api/admin/branches')
-def api_admin_branches():
-    if not require_admin():
-        return jsonify({"error": "forbidden"}), 403
-    return jsonify(get_branches())
 
-@app.route('/api/admin/branches', methods=['POST'])
-def api_admin_add_branch():
-    if not require_admin():
-        return jsonify({"error": "forbidden"}), 403
-    body = request.get_json(silent=True) or {}
-    name = (body.get('name') or '').strip()
-    if not name:
-        return jsonify({"ok": False, "error": "empty name"}), 400
-    ok = add_branch(name)
-    return jsonify({"ok": ok})
-
-@app.route('/api/admin/branches/<name>', methods=['DELETE'])
-def api_admin_delete_branch(name):
-    if not require_admin():
-        return jsonify({"error": "forbidden"}), 403
-    ok = delete_branch(name)
-    return jsonify({"ok": ok})
-
-@app.route('/api/admin/branches/assign', methods=['POST'])
-def api_admin_assign_branch():
-    if not require_admin():
-        return jsonify({"error": "forbidden"}), 403
-    body = request.get_json(silent=True) or {}
-    try:
-        user_id = int(body.get('user_id'))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "invalid user_id"}), 400
-    branch_name = (body.get('branch_name') or '').strip()
-    if not branch_name:
-        return jsonify({"ok": False, "error": "empty branch"}), 400
-    updated = set_customer_branch(user_id, branch_name)
-    return jsonify({"ok": updated})
-
-@app.route('/api/admin/branches/<name>/customers')
-def api_admin_branch_customers(name):
-    if not require_admin():
-        return jsonify({"error": "forbidden"}), 403
-    return jsonify(get_customers_by_branch(name))
 @app.route('/admin')
 def admin_dashboard():
     return render_template_string(ADMIN_HTML)
@@ -3487,6 +3794,12 @@ def api_admin_stats():
     if not require_admin():
         return jsonify({"error": "forbidden"}), 403
     return jsonify(get_stats())
+
+@app.route('/api/admin/analytics')
+def api_admin_analytics():
+    if not require_admin():
+        return jsonify({"error": "forbidden"}), 403
+    return jsonify(get_analytics())
 
 @app.route('/api/admin/customers')
 def api_admin_customers():
@@ -4169,12 +4482,22 @@ def index():
                 notify_super_admins(f"💰 የዋጋ ጥያቄ ደረሰ!\n\n{info}")
                 return "OK"
 
-            # Normal /start - single clear message, button label matches call-to-action
+            # Normal /start - main button + quick-access shortcuts straight into the Mini App
             send_with_webapp_button(
                 chat_id,
                 WELCOME_MESSAGE + "\n\n👇 ሙሉ ካታሎግ እና አገልግሎት ለማየት ከታች ያለውን ቁልፍ ይጫኑ 👇",
                 "🚀 መተግበሪያውን ክፈት / OPEN APP",
-                '/webapp'
+                '/webapp',
+                extra_rows=[
+                    [
+                        {'text': '🛍️ ምርቶች', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-products"}},
+                        {'text': '💼 ስራ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-jobs"}}
+                    ],
+                    [
+                        {'text': '📞 ደውሉ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp#page-contact"}},
+                        {'text': '⚙️ ተጨማሪ', 'web_app': {'url': f"{BASE_URL.rstrip('/')}/webapp"}}
+                    ]
+                ]
             )
             requests.post(url, json={
                 'chat_id': chat_id,
